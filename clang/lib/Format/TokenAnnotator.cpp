@@ -2091,6 +2091,7 @@ private:
     }
     CurrentToken->Role.reset();
     CurrentToken->MatchingParen = nullptr;
+    CurrentToken->AssignmentExpressionEnd = nullptr;
     CurrentToken->FakeLParens.clear();
     CurrentToken->FakeRParens = 0;
   }
@@ -3218,6 +3219,7 @@ public:
 
     FormatToken *Start = Current;
     FormatToken *LatestOperator = nullptr;
+    FormatToken *TopLevelAssignment = nullptr;
     unsigned OperatorIndex = 0;
     // The first name of the current type in a port list.
     FormatToken *VerilogFirstOfType = nullptr;
@@ -3288,12 +3290,18 @@ public:
         // thus close a scope and open a new one at the same time.
         while (Current && (!Current->closesScope() || Current->opensScope())) {
           next();
-          parse();
+          parseNestedExpression();
         }
         next();
       } else {
         // Operator found.
         if (CurrentPrecedence == Precedence) {
+          if (Precedence == prec::Assignment &&
+              Current->is(TT_BinaryOperator) && ExpressionNestingLevel == 0 &&
+              OperatorIndex == 0 && !Line.IsMultiVariableDeclStmt &&
+              !isFunctionSpecifier(*Current)) {
+            TopLevelAssignment = Current;
+          }
           if (LatestOperator)
             LatestOperator->NextOperator = Current;
           LatestOperator = Current;
@@ -3307,6 +3315,13 @@ public:
     // Group variables of the same type.
     if (Style.isVerilog() && Precedence == prec::Comma && VerilogFirstOfType)
       addFakeParenthesis(VerilogFirstOfType, prec::Comma);
+
+    if (TopLevelAssignment) {
+      FormatToken *End =
+          Current ? Current->getPreviousNonComment() : Line.getLastNonComment();
+      if (End && End != TopLevelAssignment)
+        TopLevelAssignment->AssignmentExpressionEnd = End;
+    }
 
     if (LatestOperator && (Current || Precedence > 0)) {
       // The requires clauses do not neccessarily end in a semicolon or a brace,
@@ -3334,6 +3349,21 @@ public:
   }
 
 private:
+  bool isFunctionSpecifier(const FormatToken &Assignment) const {
+    if (!Line.MightBeFunctionDecl || Assignment.isNot(tok::equal))
+      return false;
+
+    const FormatToken *RHS = Assignment.getNextNonComment();
+    if (!RHS)
+      return false;
+
+    const bool IsSpecifier =
+        RHS->isOneOf(tok::kw_default, tok::kw_delete) ||
+        (RHS->is(tok::numeric_constant) && RHS->TokenText == "0");
+    const FormatToken *AfterRHS = RHS->getNextNonComment();
+    return IsSpecifier && AfterRHS && AfterRHS->is(tok::semi);
+  }
+
   /// Gets the precedence (+1) of the given token for binary operators
   /// and other tokens that we treat like binary operators.
   int getCurrentPrecedence() {
@@ -3430,12 +3460,18 @@ private:
     if (!Current || Current->isNot(tok::question))
       return;
     next();
-    parse(prec::Assignment);
+    parseNestedExpression(prec::Assignment);
     if (!Current || Current->isNot(TT_ConditionalExpr))
       return;
     next();
-    parse(prec::Assignment);
+    parseNestedExpression(prec::Assignment);
     addFakeParenthesis(Start, prec::Conditional);
+  }
+
+  void parseNestedExpression(int Precedence = 0) {
+    ++ExpressionNestingLevel;
+    parse(Precedence);
+    --ExpressionNestingLevel;
   }
 
   void next(bool SkipPastLeadingComments = true) {
@@ -3574,7 +3610,7 @@ private:
       while (Current && Current != FirstOfType) {
         if (Current->opensScope()) {
           next();
-          parse();
+          parseNestedExpression();
         }
         next();
       }
@@ -3587,6 +3623,7 @@ private:
   const AdditionalKeywords &Keywords;
   const AnnotatedLine &Line;
   FormatToken *Current;
+  unsigned ExpressionNestingLevel = 0;
 };
 
 } // end anonymous namespace

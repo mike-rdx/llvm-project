@@ -1615,6 +1615,21 @@ struct FormatStyle {
   /// \version 18
   bool BreakAdjacentStringLiterals;
 
+  /// Different ways to break after assignment operators.
+  enum BreakAfterAssignmentStyle : int8_t {
+    /// Do not force a line break after assignment operators.
+    BAAS_Never,
+    /// If the right-hand side of a top-level assignment does not fit on the
+    /// current line, force a line break after the assignment operator.
+    /// Assignments to braced initializer lists or lambda expressions and
+    /// declarations with multiple declarators are excluded.
+    BAAS_IfOverLimit,
+  };
+
+  /// The way to break after assignment operators.
+  /// \version 21
+  BreakAfterAssignmentStyle BreakAfterAssignment;
+
   /// Different ways to break after attributes.
   enum AttributeBreakingStyle : int8_t {
     /// Always break after attributes.
@@ -5443,6 +5458,7 @@ struct FormatStyle {
            BitFieldColonSpacing == R.BitFieldColonSpacing &&
            BracedInitializerIndentWidth == R.BracedInitializerIndentWidth &&
            BreakAdjacentStringLiterals == R.BreakAdjacentStringLiterals &&
+           BreakAfterAssignment == R.BreakAfterAssignment &&
            BreakAfterAttributes == R.BreakAfterAttributes &&
            BreakAfterJavaFieldAnnotations == R.BreakAfterJavaFieldAnnotations &&
            BreakAfterReturnType == R.BreakAfterReturnType &&

@@ -154,6 +154,31 @@ static bool mustBreakBinaryOperation(const FormatToken &Current,
               : isAlignableBinaryOperator)(Current);
 }
 
+static bool mustBreakAfterAssignment(const LineState &State,
+                                     const FormatStyle &Style,
+                                     unsigned ColumnLimit) {
+  if (Style.BreakAfterAssignment != FormatStyle::BAAS_IfOverLimit ||
+      Style.ColumnLimit == 0) {
+    return false;
+  }
+
+  const FormatToken &Current = *State.NextToken;
+  const FormatToken &Previous = *Current.Previous;
+  const FormatToken *End = Previous.AssignmentExpressionEnd;
+  if (!End || !Current.CanBreakBefore ||
+      Current.isOneOf(tok::l_brace, TT_LambdaLSquare)) {
+    return false;
+  }
+
+  unsigned Column = State.Column;
+  for (const FormatToken *Tok = &Current; Tok; Tok = Tok->Next) {
+    Column += Tok->SpacesRequiredBefore + Tok->ColumnWidth;
+    if (Tok == End)
+      return Column > ColumnLimit;
+  }
+  return false;
+}
+
 static bool opensProtoMessageField(const FormatToken &LessTok,
                                    const FormatStyle &Style) {
   if (LessTok.isNot(tok::less))
@@ -409,6 +434,8 @@ bool ContinuationIndenter::mustBreak(const LineState &State) {
          Style.ColumnLimit > 0)))) {
     return true;
   }
+  if (mustBreakAfterAssignment(State, Style, getColumnLimit(State)))
+    return true;
   if (CurrentState.BreakBeforeClosingBrace &&
       (Current.closesBlockOrBlockTypeList(Style) ||
        (Current.is(tok::r_brace) && Current.MatchingParen &&

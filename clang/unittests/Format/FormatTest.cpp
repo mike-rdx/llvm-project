@@ -7781,6 +7781,146 @@ TEST_F(FormatTest, BreakingBeforeNonAssigmentOperators) {
                Style);
 }
 
+TEST_F(FormatTest, BreakAfterAssignment) {
+  FormatStyle Style = getLLVMStyle();
+  EXPECT_EQ(Style.BreakAfterAssignment, FormatStyle::BAAS_Never);
+
+  Style.ColumnLimit = 120;
+  Style.BreakBeforeBinaryOperators = FormatStyle::BOS_NonAssignment;
+  Style.AlignAfterOpenBracket = FormatStyle::BAS_AlwaysBreak;
+  Style.BinPackArguments = true;
+
+  verifyFormat("int answer = computeAnswer();", Style);
+
+  const StringRef Input = "database::ObjectPath path = "
+                          "database::makeObjectPathFromPlainParts(\n"
+                          "definition.velocity_dataset_encoded_path,\n"
+                          "definition.velocity_dataset_readable_path);";
+  const StringRef Default = "database::ObjectPath path = "
+                            "database::makeObjectPathFromPlainParts(\n"
+                            "    definition.velocity_dataset_encoded_path, "
+                            "definition.velocity_dataset_readable_path);";
+  verifyFormat(Default, Input, Style);
+
+  Style.BreakAfterAssignment = FormatStyle::BAAS_IfOverLimit;
+  verifyFormat("database::ObjectPath path =\n"
+               "    database::makeObjectPathFromPlainParts(\n"
+               "        definition.velocity_dataset_encoded_path, "
+               "definition.velocity_dataset_readable_path);",
+               Input, Style);
+
+  FormatStyle Nested = getLLVMStyleWithColumns(40);
+  Nested.BreakAfterAssignment = FormatStyle::BAAS_IfOverLimit;
+  Nested.BreakBeforeBinaryOperators = FormatStyle::BOS_All;
+  Nested.AlignAfterOpenBracket = FormatStyle::BAS_AlwaysBreak;
+  Nested.BinPackArguments = true;
+  verifyFormat("void f(\n"
+               "    int parameter\n"
+               "    = veryLongDefaultValueName);\n"
+               "void g() {\n"
+               "  consume(\n"
+               "      argumentWithLongName\n"
+               "      = veryLongAssignedValueName);\n"
+               "  if (conditionWithLongName\n"
+               "      = veryLongAssignedValueName) {\n"
+               "  }\n"
+               "  outer(\n"
+               "      (nestedAssignmentWithLongName\n"
+               "       = veryLongAssignedValueName));\n"
+               "}",
+               "void f(int parameter = veryLongDefaultValueName);\n"
+               "void g() {\n"
+               "  consume(argumentWithLongName = "
+               "veryLongAssignedValueName);\n"
+               "  if (conditionWithLongName = veryLongAssignedValueName) {}\n"
+               "  outer((nestedAssignmentWithLongName = "
+               "veryLongAssignedValueName));\n"
+               "}",
+               Nested);
+
+  verifyFormat("auto value\n"
+               "    = conditionWithLongName\n"
+               "          ? nestedAssignmentWithLongName\n"
+               "            = veryLongAssignedValueName\n"
+               "          : fallback;",
+               "auto value = conditionWithLongName ? "
+               "nestedAssignmentWithLongName = veryLongAssignedValueName : "
+               "fallback;",
+               Nested);
+  verifyFormat("outerAssignmentWithLongName\n"
+               "    = nestedAssignmentWithLongName\n"
+               "    = veryLongAssignedValueName;",
+               "outerAssignmentWithLongName = nestedAssignmentWithLongName "
+               "= veryLongAssignedValueName;",
+               Nested);
+}
+
+TEST_F(FormatTest, BreakAfterAssignmentUsesRightHandSideLength) {
+  FormatStyle Style = getLLVMStyleWithColumns(120);
+  Style.BreakAfterAssignment = FormatStyle::BAAS_IfOverLimit;
+  Style.BreakBeforeBinaryOperators = FormatStyle::BOS_NonAssignment;
+  Style.AlignAfterOpenBracket = FormatStyle::BAS_AlwaysBreak;
+  Style.BinPackArguments = true;
+
+  verifyFormat("int x = 5; // this is a deliberately very long trailing "
+               "comment that exceeds the configured column limit by "
+               "containing\n"
+               "           // far more words than necessary for this "
+               "regression case",
+               Style);
+
+  Style.ColumnLimit = 100;
+  verifyFormat("auto callback = [this](int x) {\n"
+               "  performAnExtremelyLongOperationWithManyArguments(\n"
+               "      x, firstLongArgument, secondLongArgument, "
+               "thirdLongArgument);\n"
+               "};",
+               Style);
+  verifyFormat("p_main_window = remoteqt::invokeInGuiThread([&cp] {\n"
+               "  performAnExtremelyLongOperationWithManyArguments(\n"
+               "      cp, firstLongArgument, secondLongArgument, "
+               "thirdLongArgument);\n"
+               "});",
+               Style);
+
+  Style.ColumnLimit = 60;
+  verifyFormat("std::vector<int> values = {\n"
+               "    firstVeryLongElementName, secondVeryLongElementName,\n"
+               "    thirdVeryLongElementName};",
+               Style);
+
+  verifyFormat("valueWithLongName +=\n"
+               "    computeSomethingWithSeveralLongArguments(\n"
+               "        firstArgument, secondArgument);",
+               "valueWithLongName += "
+               "computeSomethingWithSeveralLongArguments(firstArgument, "
+               "secondArgument);",
+               Style);
+}
+
+TEST_F(FormatTest, BreakAfterAssignmentSkipsFunctionSpecifiersAndDeclarators) {
+  FormatStyle Style = getLLVMStyleWithColumns(60);
+  Style.BreakAfterAssignment = FormatStyle::BAAS_IfOverLimit;
+  Style.BreakBeforeBinaryOperators = FormatStyle::BOS_NonAssignment;
+  Style.AlignAfterOpenBracket = FormatStyle::BAS_AlwaysBreak;
+  Style.BinPackArguments = true;
+
+  verifyFormat("virtual void\n"
+               "someVeryLongFunctionName(int a, int b) const = 0;",
+               Style);
+  verifyFormat("T() = default; // this is a deliberately very long trailing\n"
+               "               // comment",
+               Style);
+  verifyFormat("T(int) = delete; // this is a deliberately very long\n"
+               "                 // trailing comment",
+               Style);
+
+  Style.ColumnLimit = 40;
+  verifyFormat("int alphaValue = 1, betaValue = 2,\n"
+               "    gammaValue = 3;",
+               Style);
+}
+
 TEST_F(FormatTest, AllowBinPackingInsideArguments) {
   FormatStyle Style = getLLVMStyleWithColumns(40);
   Style.BreakBeforeBinaryOperators = FormatStyle::BOS_NonAssignment;

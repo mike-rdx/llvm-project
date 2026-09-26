@@ -1126,6 +1126,12 @@ TEST(ConfigParseTest, ParsesConfiguration) {
   CHECK_PARSE("BreakAfterAttributes: Never", BreakAfterAttributes,
               FormatStyle::ABS_Never);
 
+  Style.BreakAfterAssignment = FormatStyle::BAAS_IfOverLimit;
+  CHECK_PARSE("BreakAfterAssignment: Never", BreakAfterAssignment,
+              FormatStyle::BAAS_Never);
+  CHECK_PARSE("BreakAfterAssignment: IfOverLimit", BreakAfterAssignment,
+              FormatStyle::BAAS_IfOverLimit);
+
   const auto DefaultLineEnding = FormatStyle::LE_DeriveLF;
   CHECK_PARSE("LineEnding: LF", LineEnding, FormatStyle::LE_LF);
   CHECK_PARSE("LineEnding: CRLF", LineEnding, FormatStyle::LE_CRLF);

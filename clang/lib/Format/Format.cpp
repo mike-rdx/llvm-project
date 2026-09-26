@@ -115,6 +115,15 @@ struct ScalarEnumerationTraits<FormatStyle::AttributeBreakingStyle> {
 };
 
 template <>
+struct ScalarEnumerationTraits<FormatStyle::BreakAfterAssignmentStyle> {
+  static void enumeration(IO &IO,
+                          FormatStyle::BreakAfterAssignmentStyle &Value) {
+    IO.enumCase(Value, "Never", FormatStyle::BAAS_Never);
+    IO.enumCase(Value, "IfOverLimit", FormatStyle::BAAS_IfOverLimit);
+  }
+};
+
+template <>
 struct ScalarEnumerationTraits<FormatStyle::ArrayInitializerAlignmentStyle> {
   static void enumeration(IO &IO,
                           FormatStyle::ArrayInitializerAlignmentStyle &Value) {
@@ -1091,6 +1100,7 @@ template <> struct MappingTraits<FormatStyle> {
     IO.mapOptional("BraceWrapping", Style.BraceWrapping);
     IO.mapOptional("BreakAdjacentStringLiterals",
                    Style.BreakAdjacentStringLiterals);
+    IO.mapOptional("BreakAfterAssignment", Style.BreakAfterAssignment);
     IO.mapOptional("BreakAfterAttributes", Style.BreakAfterAttributes);
     IO.mapOptional("BreakAfterJavaFieldAnnotations",
                    Style.BreakAfterJavaFieldAnnotations);
@@ -1625,6 +1635,7 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
                              /*SplitEmptyRecord=*/true,
                              /*SplitEmptyNamespace=*/true};
   LLVMStyle.BreakAdjacentStringLiterals = true;
+  LLVMStyle.BreakAfterAssignment = FormatStyle::BAAS_Never;
   LLVMStyle.BreakAfterAttributes = FormatStyle::ABS_Leave;
   LLVMStyle.BreakAfterJavaFieldAnnotations = false;
   LLVMStyle.BreakAfterReturnType = FormatStyle::RTBS_None;

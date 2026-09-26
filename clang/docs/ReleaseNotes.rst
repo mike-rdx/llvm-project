@@ -1193,6 +1193,9 @@ AST Matchers
 clang-format
 ------------
 
+- Adds ``BreakAfterAssignment`` option for forcing a line break after a
+  top-level assignment operator when its right-hand side exceeds the column
+  limit.
 - Adds ``BreakBeforeTemplateCloser`` option.
 - Adds ``BinPackLongBracedList`` option to override bin packing options in
   long (20 item or more) braced list initializer lists.

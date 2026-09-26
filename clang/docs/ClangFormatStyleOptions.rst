@@ -2630,6 +2630,22 @@ the configuration (without a prefix: ``Auto``).
      false:
      return "Code" "\0\52\26\55\55\0" "x013" "\02\xBA";
 
+.. _BreakAfterAssignment:
+
+**BreakAfterAssignment** (``BreakAfterAssignmentStyle``) :versionbadge:`clang-format 21` :ref:`¶ <BreakAfterAssignment>`
+  The way to break after assignment operators.
+
+  Possible values:
+
+  * ``BAAS_Never`` (in configuration: ``Never``)
+    Do not force a line break after assignment operators.
+
+  * ``BAAS_IfOverLimit`` (in configuration: ``IfOverLimit``)
+    If the right-hand side of a top-level assignment does not fit on the
+    current line, force a line break after the assignment operator.
+    Assignments to braced initializer lists or lambda expressions and
+    declarations with multiple declarators are excluded.
+
 .. _BreakAfterAttributes:
 
 **BreakAfterAttributes** (``AttributeBreakingStyle``) :versionbadge:`clang-format 16` :ref:`¶ <BreakAfterAttributes>`

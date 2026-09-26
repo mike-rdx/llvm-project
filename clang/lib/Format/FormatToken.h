@@ -568,6 +568,10 @@ public:
   /// with the same precedence, points to the next operator.
   FormatToken *NextOperator = nullptr;
 
+  /// If this is the outermost assignment operator in a top-level expression,
+  /// points to the last token of that expression.
+  FormatToken *AssignmentExpressionEnd = nullptr;
+
   /// If this is a bracket, this points to the matching one.
   FormatToken *MatchingParen = nullptr;
 

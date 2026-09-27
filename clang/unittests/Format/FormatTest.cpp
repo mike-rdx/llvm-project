@@ -28794,7 +28794,8 @@ TEST_F(FormatTest, BreakAfterAttributes) {
                "Foo &operator-(Foo &);",
                Style);
 
-  Style.ReferenceAlignment.Defaulf = FormatStyle::ReferenceAlignmentStyle::RAS_Left;
+  Style.ReferenceAlignment.Default =
+      FormatStyle::ReferenceAlignmentStyle::RAS_Left;
   verifyFormat("[[nodiscard]]\n"
                "Foo& operator-(Foo&);",
                Style);

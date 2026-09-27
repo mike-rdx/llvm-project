@@ -2646,6 +2646,8 @@ the configuration (without a prefix: ``Auto``).
     Assignments to braced initializer lists or lambda expressions and
     declarations with multiple declarators are excluded.
 
+
+
 .. _BreakAfterAttributes:
 
 **BreakAfterAttributes** (``AttributeBreakingStyle``) :versionbadge:`clang-format 16` :ref:`¶ <BreakAfterAttributes>`
@@ -4833,6 +4835,60 @@ the configuration (without a prefix: ``Auto``).
            [](SomeReallyLongLambdaSignatureArgument foo) {
          return;
        }));
+
+
+
+.. _LambdaHeaderOnStatementLine:
+
+**LambdaHeaderOnStatementLine** (``LambdaHeaderOnStatementLineStyle``) :versionbadge:`clang-format 21` :ref:`¶ <LambdaHeaderOnStatementLine>`
+  The way to place the header of a lambda that is the last argument of a
+  statement. Has no effect unless ``BraceWrapping.BeforeLambdaBody`` is
+  set.
+
+  Possible values:
+
+  * ``LHSL_Never`` (in configuration: ``Never``)
+    Format the lambda like any other argument.
+
+  * ``LHSL_IfFitsOnAssignment`` (in configuration: ``IfFitsOnAssignment``)
+    Like ``IfFitsAlways``, but only for statements with a top-level
+    assignment operator, such as ``x = f(...);`` or ``auto x = f(...);``
+    (the assignments that ``BreakAfterAssignment`` recognizes). Direct
+    initialization such as ``T x(f(...));`` is not included.
+
+    .. code-block:: c++
+
+       auto it = std::find_if(items.begin(), items.end(), [&](const Item &x)
+       {
+         return x.isValid() && x.id() == id;
+       });
+       std::for_each(
+           items.begin(), items.end(),
+           [&](const Item &x)
+           {
+             x.update();
+             ++count;
+           });
+
+  * ``LHSL_IfFitsAlways`` (in configuration: ``IfFitsAlways``)
+    If a statement ends with a call whose last argument is a lambda with a
+    multi-line body, and everything from the start of the statement through
+    the lambda's parameters fits on one line, keep that line unbroken and
+    put the lambda body at the indentation of the statement. A lambda that
+    ``AllowShortLambdasOnASingleLine`` would merge into one line stays on
+    one line instead if it fits on a continuation line.
+
+    .. code-block:: c++
+
+       auto it = std::find_if(items.begin(), items.end(), [&](const Item &x)
+       {
+         return x.isValid() && x.id() == id;
+       });
+       std::for_each(items.begin(), items.end(), [&](const Item &x)
+       {
+         x.update();
+         ++count;
+       });
 
 
 

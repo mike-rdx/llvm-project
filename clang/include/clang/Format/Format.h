@@ -3358,6 +3358,55 @@ struct FormatStyle {
   /// \version 13
   LambdaBodyIndentationKind LambdaBodyIndentation;
 
+  /// Different ways to place the header of a lambda that is the last argument
+  /// of a statement.
+  enum LambdaHeaderOnStatementLineStyle : int8_t {
+    /// Format the lambda like any other argument.
+    LHSL_Never,
+    /// Like ``IfFitsAlways``, but only for statements with a top-level
+    /// assignment operator, such as ``x = f(...);`` or ``auto x = f(...);``
+    /// (the assignments that ``BreakAfterAssignment`` recognizes). Direct
+    /// initialization such as ``T x(f(...));`` is not included.
+    /// \code
+    ///    auto it = std::find_if(items.begin(), items.end(), [&](const Item &x)
+    ///    {
+    ///      return x.isValid() && x.id() == id;
+    ///    });
+    ///    std::for_each(
+    ///        items.begin(), items.end(),
+    ///        [&](const Item &x)
+    ///        {
+    ///          x.update();
+    ///          ++count;
+    ///        });
+    /// \endcode
+    LHSL_IfFitsOnAssignment,
+    /// If a statement ends with a call whose last argument is a lambda with a
+    /// multi-line body, and everything from the start of the statement through
+    /// the lambda's parameters fits on one line, keep that line unbroken and
+    /// put the lambda body at the indentation of the statement. A lambda that
+    /// ``AllowShortLambdasOnASingleLine`` would merge into one line stays on
+    /// one line instead if it fits on a continuation line.
+    /// \code
+    ///    auto it = std::find_if(items.begin(), items.end(), [&](const Item &x)
+    ///    {
+    ///      return x.isValid() && x.id() == id;
+    ///    });
+    ///    std::for_each(items.begin(), items.end(), [&](const Item &x)
+    ///    {
+    ///      x.update();
+    ///      ++count;
+    ///    });
+    /// \endcode
+    LHSL_IfFitsAlways,
+  };
+
+  /// The way to place the header of a lambda that is the last argument of a
+  /// statement. Has no effect unless ``BraceWrapping.BeforeLambdaBody`` is
+  /// set.
+  /// \version 21
+  LambdaHeaderOnStatementLineStyle LambdaHeaderOnStatementLine;
+
   /// Supported languages.
   ///
   /// When stored in a configuration file, specifies the language, that the
@@ -5517,6 +5566,7 @@ struct FormatStyle {
            KeepEmptyLines == R.KeepEmptyLines &&
            KeepFormFeed == R.KeepFormFeed && Language == R.Language &&
            LambdaBodyIndentation == R.LambdaBodyIndentation &&
+           LambdaHeaderOnStatementLine == R.LambdaHeaderOnStatementLine &&
            LineEnding == R.LineEnding && MacroBlockBegin == R.MacroBlockBegin &&
            MacroBlockEnd == R.MacroBlockEnd && Macros == R.Macros &&
            MacrosSkippedByRemoveParentheses ==

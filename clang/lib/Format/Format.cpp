@@ -462,6 +462,17 @@ struct ScalarEnumerationTraits<FormatStyle::LambdaBodyIndentationKind> {
   }
 };
 
+template <>
+struct ScalarEnumerationTraits<FormatStyle::LambdaHeaderOnStatementLineStyle> {
+  static void
+  enumeration(IO &IO, FormatStyle::LambdaHeaderOnStatementLineStyle &Value) {
+    IO.enumCase(Value, "Never", FormatStyle::LHSL_Never);
+    IO.enumCase(Value, "IfFitsOnAssignment",
+                FormatStyle::LHSL_IfFitsOnAssignment);
+    IO.enumCase(Value, "IfFitsAlways", FormatStyle::LHSL_IfFitsAlways);
+  }
+};
+
 template <> struct ScalarEnumerationTraits<FormatStyle::LineEndingStyle> {
   static void enumeration(IO &IO, FormatStyle::LineEndingStyle &Value) {
     IO.enumCase(Value, "LF", FormatStyle::LE_LF);
@@ -1171,6 +1182,8 @@ template <> struct MappingTraits<FormatStyle> {
     IO.mapOptional("KeepEmptyLines", Style.KeepEmptyLines);
     IO.mapOptional("KeepFormFeed", Style.KeepFormFeed);
     IO.mapOptional("LambdaBodyIndentation", Style.LambdaBodyIndentation);
+    IO.mapOptional("LambdaHeaderOnStatementLine",
+                   Style.LambdaHeaderOnStatementLine);
     IO.mapOptional("LineEnding", Style.LineEnding);
     IO.mapOptional("MacroBlockBegin", Style.MacroBlockBegin);
     IO.mapOptional("MacroBlockEnd", Style.MacroBlockEnd);
@@ -1703,6 +1716,7 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
   };
   LLVMStyle.KeepFormFeed = false;
   LLVMStyle.LambdaBodyIndentation = FormatStyle::LBI_Signature;
+  LLVMStyle.LambdaHeaderOnStatementLine = FormatStyle::LHSL_Never;
   LLVMStyle.Language = Language;
   LLVMStyle.LineEnding = FormatStyle::LE_DeriveLF;
   LLVMStyle.MaxEmptyLinesToKeep = 1;

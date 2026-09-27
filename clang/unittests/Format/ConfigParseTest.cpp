@@ -1132,6 +1132,15 @@ TEST(ConfigParseTest, ParsesConfiguration) {
   CHECK_PARSE("BreakAfterAssignment: IfOverLimit", BreakAfterAssignment,
               FormatStyle::BAAS_IfOverLimit);
 
+  Style.LambdaHeaderOnStatementLine = FormatStyle::LHSL_IfFitsAlways;
+  CHECK_PARSE("LambdaHeaderOnStatementLine: Never", LambdaHeaderOnStatementLine,
+              FormatStyle::LHSL_Never);
+  CHECK_PARSE("LambdaHeaderOnStatementLine: IfFitsOnAssignment",
+              LambdaHeaderOnStatementLine,
+              FormatStyle::LHSL_IfFitsOnAssignment);
+  CHECK_PARSE("LambdaHeaderOnStatementLine: IfFitsAlways",
+              LambdaHeaderOnStatementLine, FormatStyle::LHSL_IfFitsAlways);
+
   const auto DefaultLineEnding = FormatStyle::LE_DeriveLF;
   CHECK_PARSE("LineEnding: LF", LineEnding, FormatStyle::LE_LF);
   CHECK_PARSE("LineEnding: CRLF", LineEnding, FormatStyle::LE_CRLF);

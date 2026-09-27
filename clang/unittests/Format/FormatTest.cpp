@@ -7929,6 +7929,260 @@ TEST_F(FormatTest, BreakAfterAssignmentSkipsFunctionSpecifiersAndDeclarators) {
                Style);
 }
 
+TEST_F(FormatTest, LambdaHeaderOnStatementLine) {
+  FormatStyle Style = getLLVMStyleWithColumns(60);
+  Style.BreakBeforeBraces = FormatStyle::BS_Custom;
+  Style.BraceWrapping.BeforeLambdaBody = true;
+  Style.AllowShortLambdasOnASingleLine = FormatStyle::SLS_Inline;
+  EXPECT_EQ(Style.LambdaHeaderOnStatementLine, FormatStyle::LHSL_Never);
+
+  const StringRef FindIf = "void f() {\n"
+                           "  auto it = find_if(v.begin(), v.end(), "
+                           "[&](const Item &x) { a(); return b(x); });\n"
+                           "}";
+  verifyFormat("void f() {\n"
+               "  auto it = find_if(v.begin(), v.end(),\n"
+               "                    [&](const Item &x)\n"
+               "                    {\n"
+               "                      a();\n"
+               "                      return b(x);\n"
+               "                    });\n"
+               "}",
+               FindIf, Style);
+
+  Style.LambdaHeaderOnStatementLine = FormatStyle::LHSL_IfFitsAlways;
+  verifyFormat("void f() {\n"
+               "  auto it = find_if(v.begin(), v.end(), [&](const Item &x)\n"
+               "  {\n"
+               "    a();\n"
+               "    return b(x);\n"
+               "  });\n"
+               "}",
+               FindIf, Style);
+  verifyFormat("void f() {\n"
+               "  it = find_if(v.begin(), v.end(), [&](const Item &x) -> T *\n"
+               "  {\n"
+               "    a();\n"
+               "    return b(x);\n"
+               "  });\n"
+               "}",
+               Style);
+  verifyFormat("void f() {\n"
+               "  connect(p, &P::clicked, [this](bool on)\n"
+               "  {\n"
+               "    apply(on);\n"
+               "    update();\n"
+               "  });\n"
+               "}",
+               Style);
+  verifyFormat("void f() {\n"
+               "  auto g = [&]()\n"
+               "  {\n"
+               "    auto it = find_if(v.begin(), v.end(), [&](int x)\n"
+               "    {\n"
+               "      a();\n"
+               "      return b(x);\n"
+               "    });\n"
+               "  };\n"
+               "}",
+               Style);
+
+  // A one-statement body gets the same layout if the lambda does not fit on
+  // one line, and stays on one line otherwise.
+  verifyFormat("void f() {\n"
+               "  auto it = find_if(v.begin(), v.end(), [&](const Item &x)\n"
+               "  {\n"
+               "    return x.isValid() && x.id() == expected_id;\n"
+               "  });\n"
+               "}",
+               "void f() {\n"
+               "  auto it = find_if(v.begin(), v.end(), [&](const Item &x) "
+               "{ return x.isValid() && x.id() == expected_id; });\n"
+               "}",
+               Style);
+  verifyFormat("void f() {\n"
+               "  auto it =\n"
+               "      find_if(v.begin(), v.end(),\n"
+               "              [&](const Item &x) { return x.isValid(); });\n"
+               "}",
+               "void f() {\n"
+               "  auto it = find_if(v.begin(), v.end(), "
+               "[&](const Item &x) { return x.isValid(); });\n"
+               "}",
+               Style);
+  verifyFormat("void f() {\n"
+               "  auto it = find_if(b, e, [](int x) { return x > 0; });\n"
+               "}",
+               Style);
+  verifyFormat("void f() {\n"
+               "  t.apply([](double &x) -> double & { return x = g(x); });\n"
+               "}",
+               Style);
+
+  // Parentheses around the lambda count as part of the argument.
+  verifyFormat("void f() {\n"
+               "  CONNECT(item, &Item::changed, this,\n"
+               "          ([this](bool on) { emit usageChanged(on); }));\n"
+               "}",
+               Style);
+  verifyFormat("void f() {\n"
+               "  CONNECT(item, &Item::changed, this, ([this, item](bool on)\n"
+               "  {\n"
+               "    emit usageChanged(index(*item), on);\n"
+               "  }));\n"
+               "}",
+               Style);
+}
+
+TEST_F(FormatTest, LambdaHeaderOnStatementLineOnAssignment) {
+  FormatStyle Style = getLLVMStyleWithColumns(60);
+  Style.BreakBeforeBraces = FormatStyle::BS_Custom;
+  Style.BraceWrapping.BeforeLambdaBody = true;
+  Style.AllowShortLambdasOnASingleLine = FormatStyle::SLS_Inline;
+  Style.LambdaHeaderOnStatementLine = FormatStyle::LHSL_IfFitsOnAssignment;
+
+  verifyFormat("void f() {\n"
+               "  auto it = find_if(v.begin(), v.end(), [&](const Item &x)\n"
+               "  {\n"
+               "    a();\n"
+               "    return b(x);\n"
+               "  });\n"
+               "  on = connect(p, &P::clicked, [this](bool on)\n"
+               "  {\n"
+               "    apply(on);\n"
+               "    update();\n"
+               "  });\n"
+               "}",
+               Style);
+  verifyFormat("void f() {\n"
+               "  connect(p, &P::clicked,\n"
+               "          [this](bool on)\n"
+               "          {\n"
+               "            apply(on);\n"
+               "            update();\n"
+               "          });\n"
+               "}",
+               Style);
+}
+
+TEST_F(FormatTest, LambdaHeaderOnStatementLineSkipsNonFittingHeaders) {
+  FormatStyle Style = getLLVMStyleWithColumns(60);
+  Style.BreakBeforeBraces = FormatStyle::BS_Custom;
+  Style.BraceWrapping.BeforeLambdaBody = true;
+  Style.AllowShortLambdasOnASingleLine = FormatStyle::SLS_Inline;
+  Style.LambdaHeaderOnStatementLine = FormatStyle::LHSL_IfFitsAlways;
+
+  // The header is exactly 60 columns wide.
+  verifyFormat("void f() {\n"
+               "  auto it = find_if(v.begin(), v.end(), [&](const Item &xxx)\n"
+               "  {\n"
+               "    a();\n"
+               "    b();\n"
+               "  });\n"
+               "}",
+               Style);
+  verifyFormat("void f() {\n"
+               "  auto it = find_if(v.begin(), v.end(),\n"
+               "                    [&](const Item &xxxx)\n"
+               "                    {\n"
+               "                      a();\n"
+               "                      b();\n"
+               "                    });\n"
+               "}",
+               Style);
+
+  // The lambda is not the last argument.
+  verifyFormat("void f() {\n"
+               "  auto r = visit(\n"
+               "      [&](const auto &x)\n"
+               "      {\n"
+               "        a();\n"
+               "        return b(x);\n"
+               "      },\n"
+               "      values);\n"
+               "}",
+               Style);
+
+  // A comment in the header.
+  verifyFormat("void f() {\n"
+               "  auto it = find_if(v.begin(), v.end(), /*c*/\n"
+               "                    [&](int x)\n"
+               "                    {\n"
+               "                      a();\n"
+               "                      b();\n"
+               "                    });\n"
+               "}",
+               Style);
+}
+
+TEST_F(FormatTest, LambdaHeaderOnStatementLineSkipsNonStatements) {
+  FormatStyle Style = getLLVMStyleWithColumns(80);
+  Style.BreakBeforeBraces = FormatStyle::BS_Custom;
+  Style.BraceWrapping.BeforeLambdaBody = true;
+  Style.AllowShortLambdasOnASingleLine = FormatStyle::SLS_None;
+  Style.LambdaHeaderOnStatementLine = FormatStyle::LHSL_IfFitsAlways;
+
+  // A default argument of a function declaration.
+  verifyFormat("void registerCallback(Callback cb = makeCallback(\n"
+               "                          [](int value)\n"
+               "                          {\n"
+               "                            use(value);\n"
+               "                            log(value);\n"
+               "                          }));",
+               Style);
+  // A type alias.
+  verifyFormat("using CallbackType = decltype(makeCallback(\n"
+               "    [](int value)\n"
+               "    {\n"
+               "      use(value);\n"
+               "      log(value);\n"
+               "    }));",
+               Style);
+  // A static_assert.
+  verifyFormat("static_assert(check(\n"
+               "    [](int value)\n"
+               "    {\n"
+               "      use(value);\n"
+               "      log(value);\n"
+               "    }));",
+               Style);
+  // A multi-line raw string in the header.
+  verifyFormat("void f() {\n"
+               "  auto x = foo(R\"(line one\n"
+               "line two)\",\n"
+               "               [](int x)\n"
+               "               {\n"
+               "                 a();\n"
+               "                 b();\n"
+               "               });\n"
+               "}",
+               "void f() {\n"
+               "  auto x = foo(R\"(line one\n"
+               "line two)\", [](int x) { a(); b(); });\n"
+               "}",
+               Style);
+
+  // An empty lambda has no body to put on separate lines.
+  const StringRef EmptyLambda = "void f() {\n"
+                                "  auto result = function(argument, [] {});\n"
+                                "}";
+  Style.ColumnLimit = 41;
+  verifyFormat("void f() {\n"
+               "  auto result = function(argument,\n"
+               "                         []\n"
+               "                         {\n"
+               "                         });\n"
+               "}",
+               EmptyLambda, Style);
+  Style.ColumnLimit = 37;
+  Style.AllowShortLambdasOnASingleLine = FormatStyle::SLS_Empty;
+  verifyFormat("void f() {\n"
+               "  auto result =\n"
+               "      function(argument, [] {});\n"
+               "}",
+               EmptyLambda, Style);
+}
+
 TEST_F(FormatTest, AllowBinPackingInsideArguments) {
   FormatStyle Style = getLLVMStyleWithColumns(40);
   Style.BreakBeforeBinaryOperators = FormatStyle::BOS_NonAssignment;

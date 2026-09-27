@@ -463,6 +463,23 @@ struct LineState {
   /// Does not need to be considered for memoization because it doesn't change.
   const AnnotatedLine *Line;
 
+  /// The opening brace of the lambda whose header is kept on the statement
+  /// line (see \c FormatStyle::LambdaHeaderOnStatementLine), or \c nullptr.
+  ///
+  /// Does not need to be considered for memoization because it doesn't change.
+  const FormatToken *LambdaWithHeaderOnLine = nullptr;
+
+  /// The opening brace of a short lambda that would otherwise get its header
+  /// kept on the statement line, and that should rather stay on one line.
+  ///
+  /// Does not need to be considered for memoization because it doesn't change.
+  const FormatToken *LambdaKeptOnOneLine = nullptr;
+
+  /// The first token of the argument holding \c LambdaKeptOnOneLine.
+  ///
+  /// Does not need to be considered for memoization because it doesn't change.
+  const FormatToken *LambdaKeptOnOneLineStart = nullptr;
+
   /// Comparison operator to be able to used \c LineState in \c map.
   bool operator<(const LineState &Other) const {
     if (NextToken != Other.NextToken)

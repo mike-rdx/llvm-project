@@ -180,6 +180,165 @@ static bool mustBreakAfterAssignment(const LineState &State,
   return false;
 }
 
+// Returns the width of the tokens from First through Last joined on one line,
+// including child blocks of a single line, or UINT_MAX if a child block spans
+// several lines or ends with a comment.
+static unsigned getJoinedLength(const FormatToken &First,
+                                const FormatToken &Last) {
+  unsigned Length = 0;
+  for (const FormatToken *Tok = &First; Tok; Tok = Tok->Next) {
+    if (Tok != &First)
+      Length += Tok->SpacesRequiredBefore;
+    Length += Tok->ColumnWidth;
+    if (Tok->Children.size() > 1)
+      return UINT_MAX;
+    if (Tok->Children.size() == 1) {
+      const AnnotatedLine &Child = *Tok->Children[0];
+      if (Child.Last->is(tok::comment))
+        return UINT_MAX;
+      const unsigned ChildLength = getJoinedLength(*Child.First, *Child.Last);
+      if (ChildLength == UINT_MAX)
+        return UINT_MAX;
+      Length += 1 + ChildLength;
+    }
+    if (Tok == &Last)
+      return Length;
+  }
+  return UINT_MAX;
+}
+
+// Returns the opening brace of the lambda that LambdaHeaderOnStatementLine
+// applies to, or nullptr. The lambda must have a non-empty body and be the
+// last argument of a call that ends the statement (for IfFitsOnAssignment, a
+// statement with a top-level assignment); declarations such as function
+// parameter lists, type aliases and static_assert do not qualify. Nothing
+// before the lambda body may force or contain a line break, the header (from
+// the start of the statement through the lambda's parameters) must fit on one
+// line, and the whole statement must not. If the lambda can instead be merged
+// into one line that fits on a continuation line, sets *KeptArgumentStart to
+// the first token of the argument holding it.
+static const FormatToken *
+findLambdaWithHeaderOnLine(const AnnotatedLine &Line, unsigned FirstIndent,
+                           const FormatStyle &Style,
+                           const FormatToken **KeptArgumentStart) {
+  *KeptArgumentStart = nullptr;
+  if (Style.LambdaHeaderOnStatementLine == FormatStyle::LHSL_Never ||
+      Style.ColumnLimit == 0 || !Style.isCpp() ||
+      !Style.BraceWrapping.BeforeLambdaBody || Line.InMacroBody ||
+      Line.Type == LT_PreprocessorDirective ||
+      Line.First->isOneOf(tok::kw_if, tok::kw_for, tok::kw_while,
+                          tok::kw_switch, tok::kw_using, tok::kw_typedef,
+                          tok::kw_static_assert, tok::kw_template)) {
+    return nullptr;
+  }
+
+  const FormatToken *Last = Line.getLastNonComment();
+  if (!Last || Last->isNot(tok::semi))
+    return nullptr;
+  const FormatToken *Tok = Last->getPreviousNonComment();
+  if (!Tok || Tok->isNot(tok::r_paren))
+    return nullptr;
+  for (; Tok && Tok->is(tok::r_paren); Tok = Tok->getPreviousNonComment()) {
+    // E.g. a lambda in a default argument of a function declaration.
+    if (Tok->MatchingParen &&
+        Tok->MatchingParen->is(TT_FunctionDeclarationLParen)) {
+      return nullptr;
+    }
+  }
+  if (!Tok || Tok->isNot(tok::r_brace) || !Tok->MatchingParen ||
+      Tok->MatchingParen->isNot(TT_LambdaLBrace)) {
+    return nullptr;
+  }
+  const FormatToken *LBrace = Tok->MatchingParen;
+  // An empty body has nothing to put on separate lines.
+  if (LBrace->Children.empty())
+    return nullptr;
+
+  const FormatToken *Introducer = nullptr;
+  for (const FormatToken *T = LBrace->Previous; T; T = T->Previous) {
+    if (T->is(tok::r_square) && T->MatchingParen &&
+        T->MatchingParen->is(TT_LambdaLSquare)) {
+      Introducer = T->MatchingParen;
+      break;
+    }
+    if (T->closesScope() && T->MatchingParen)
+      T = T->MatchingParen;
+  }
+  if (!Introducer)
+    return nullptr;
+  const FormatToken *BeforeIntroducer = Introducer->getPreviousNonComment();
+  if (!BeforeIntroducer || !BeforeIntroducer->isOneOf(tok::l_paren, tok::comma))
+    return nullptr;
+
+  bool HasAssignment = false;
+  for (const FormatToken *T = Line.First; T != LBrace; T = T->Next) {
+    if ((T != Line.First && T->MustBreakBefore) || T->is(tok::comment) ||
+        !T->Children.empty() || T->IsMultiline) {
+      return nullptr;
+    }
+    if (T->AssignmentExpressionEnd)
+      HasAssignment = true;
+  }
+  if (Style.LambdaHeaderOnStatementLine ==
+          FormatStyle::LHSL_IfFitsOnAssignment &&
+      !HasAssignment) {
+    return nullptr;
+  }
+
+  const auto Fits = [&](unsigned Indent, unsigned Length) {
+    return Length != UINT_MAX && Indent + Length <= Style.ColumnLimit;
+  };
+  if (!Fits(FirstIndent, getJoinedLength(*Line.First, *LBrace->Previous)) ||
+      Fits(FirstIndent, getJoinedLength(*Line.First, *Last))) {
+    return nullptr;
+  }
+
+  // A lambda that may be merged into one line and fits on a continuation line
+  // stays on one line. The argument includes parentheses wrapped around the
+  // lambda, as in "f(a, ([] { ... }));".
+  const FormatToken *ArgumentStart = Introducer;
+  for (const FormatToken *Prev = ArgumentStart->getPreviousNonComment();
+       Prev && Prev->is(tok::l_paren);
+       Prev = ArgumentStart->getPreviousNonComment()) {
+    const FormatToken *BeforeParen = Prev->getPreviousNonComment();
+    if (!BeforeParen || !BeforeParen->isOneOf(tok::l_paren, tok::comma))
+      break;
+    ArgumentStart = Prev;
+  }
+  const bool CanMergeBody =
+      Style.AllowShortLambdasOnASingleLine == FormatStyle::SLS_Inline ||
+      Style.AllowShortLambdasOnASingleLine == FormatStyle::SLS_All;
+  if (CanMergeBody && Fits(FirstIndent + Style.ContinuationIndentWidth,
+                           getJoinedLength(*ArgumentStart, *Last))) {
+    *KeptArgumentStart = ArgumentStart;
+  }
+  return LBrace;
+}
+
+// Whether Tok is part of the header that is kept on the statement line.
+static bool isInLambdaHeaderOnLine(const LineState &State,
+                                   const FormatToken &Tok) {
+  return State.LambdaWithHeaderOnLine &&
+         Tok.TotalLength < State.LambdaWithHeaderOnLine->TotalLength;
+}
+
+// Whether Tok is a brace of the lambda whose header is kept on the statement
+// line.
+static bool isBraceOfLambdaWithHeaderOnLine(const LineState &State,
+                                            const FormatToken &Tok) {
+  const FormatToken *LBrace = State.LambdaWithHeaderOnLine;
+  return LBrace && (&Tok == LBrace ||
+                    (Tok.is(tok::r_brace) && Tok.MatchingParen == LBrace));
+}
+
+// Whether the lambda that Tok opens is indented relative to the outer scope.
+static bool isOuterScopeLambda(const LineState &State, const FormatToken &Tok,
+                               const FormatStyle &Style) {
+  return Tok.is(TT_LambdaLBrace) &&
+         (Style.LambdaBodyIndentation == FormatStyle::LBI_OuterScope ||
+          &Tok == State.LambdaWithHeaderOnLine);
+}
+
 static bool opensProtoMessageField(const FormatToken &LessTok,
                                    const FormatStyle &Style) {
   if (LessTok.isNot(tok::less))
@@ -296,6 +455,15 @@ LineState ContinuationIndenter::getInitialState(unsigned FirstIndent,
     State.Column = 0;
   }
   State.Line = Line;
+  const FormatToken *KeptArgumentStart = nullptr;
+  const FormatToken *LambdaLBrace =
+      findLambdaWithHeaderOnLine(*Line, FirstIndent, Style, &KeptArgumentStart);
+  if (KeptArgumentStart) {
+    State.LambdaKeptOnOneLine = LambdaLBrace;
+    State.LambdaKeptOnOneLineStart = KeptArgumentStart;
+  } else {
+    State.LambdaWithHeaderOnLine = LambdaLBrace;
+  }
   State.NextToken = Line->First;
   State.Stack.push_back(ParenState(/*Tok=*/nullptr, FirstIndent, FirstIndent,
                                    /*AvoidBinPacking=*/false,
@@ -326,6 +494,10 @@ bool ContinuationIndenter::canBreak(const LineState &State) {
   const FormatToken &Previous = *Current.Previous;
   const auto &CurrentState = State.Stack.back();
   assert(&Previous == Current.Previous);
+  if (isInLambdaHeaderOnLine(State, Current))
+    return false;
+  if (isBraceOfLambdaWithHeaderOnLine(State, Current))
+    return true;
   if (!Current.CanBreakBefore && !(CurrentState.BreakBeforeClosingBrace &&
                                    Current.closesBlockOrBlockTypeList(Style))) {
     return false;
@@ -423,6 +595,10 @@ bool ContinuationIndenter::mustBreak(const LineState &State) {
   const FormatToken &Current = *State.NextToken;
   const FormatToken &Previous = *Current.Previous;
   const auto &CurrentState = State.Stack.back();
+  if (isInLambdaHeaderOnLine(State, Current))
+    return false;
+  if (isBraceOfLambdaWithHeaderOnLine(State, Current))
+    return true;
   if (Style.BraceWrapping.BeforeLambdaBody && Current.CanBreakBefore &&
       Current.is(TT_LambdaLBrace) && Previous.isNot(TT_LineComment)) {
     auto LambdaBodyLength = getLengthToMatchingParen(Current, State.Stack);
@@ -748,7 +924,8 @@ void ContinuationIndenter::addTokenOnCurrentLine(LineState &State, bool DryRun,
   // the first argument.
   auto DisallowLineBreaks = [&] {
     if (!Style.isCpp() ||
-        Style.LambdaBodyIndentation == FormatStyle::LBI_OuterScope) {
+        Style.LambdaBodyIndentation == FormatStyle::LBI_OuterScope ||
+        State.LambdaWithHeaderOnLine) {
       return false;
     }
 
@@ -1083,6 +1260,14 @@ unsigned ContinuationIndenter::addTokenOnNewLine(LineState &State,
 
   Penalty += State.NextToken->SplitPenalty;
 
+  // Prefer keeping a short lambda on one line over breaking inside it, e.g.
+  // folding its body onto the next line (see LambdaHeaderOnStatementLine).
+  if (State.LambdaKeptOnOneLine &&
+      Current.TotalLength > State.LambdaKeptOnOneLineStart->TotalLength &&
+      Current.TotalLength <= State.LambdaKeptOnOneLine->TotalLength) {
+    Penalty += 10'000;
+  }
+
   // Breaking before the first "<<" is generally not desirable if the LHS is
   // short. Also always add the penalty if the LHS is split over multiple lines
   // to avoid unnecessary line breaks that just work around this penalty.
@@ -1230,8 +1415,8 @@ unsigned ContinuationIndenter::addTokenOnNewLine(LineState &State,
        Current.MatchingParen->is(TT_RequiresExpressionLBrace));
   if (!NestedBlockSpecialCase) {
     auto ParentLevelIt = std::next(State.Stack.rbegin());
-    if (Style.LambdaBodyIndentation == FormatStyle::LBI_OuterScope &&
-        Current.MatchingParen && Current.MatchingParen->is(TT_LambdaLBrace)) {
+    if (Current.MatchingParen &&
+        isOuterScopeLambda(State, *Current.MatchingParen, Style)) {
       // If the first character on the new line is a lambda's closing brace, the
       // stack still contains that lambda's parenthesis. As such, we need to
       // recurse further down the stack than usual to find the parenthesis level
@@ -1377,17 +1562,16 @@ unsigned ContinuationIndenter::getNewLineColumn(const LineState &State) {
 
   if (Style.BraceWrapping.BeforeLambdaBody &&
       Style.BraceWrapping.IndentBraces && Current.is(TT_LambdaLBrace)) {
-    const auto From = Style.LambdaBodyIndentation == FormatStyle::LBI_Signature
-                          ? CurrentState.Indent
-                          : State.FirstIndent;
+    const auto From = isOuterScopeLambda(State, Current, Style)
+                          ? State.FirstIndent
+                          : CurrentState.Indent;
     return From + Style.IndentWidth;
   }
 
   if ((NextNonComment->is(tok::l_brace) && NextNonComment->is(BK_Block)) ||
       (Style.isVerilog() && Keywords.isVerilogBegin(*NextNonComment))) {
     if (Current.NestingLevel == 0 ||
-        (Style.LambdaBodyIndentation == FormatStyle::LBI_OuterScope &&
-         State.NextToken->is(TT_LambdaLBrace))) {
+        isOuterScopeLambda(State, *State.NextToken, Style)) {
       return State.FirstIndent;
     }
     return CurrentState.Indent;
@@ -2162,9 +2346,9 @@ void ContinuationIndenter::moveStatePastScopeCloser(LineState &State) {
 }
 
 void ContinuationIndenter::moveStateToNewBlock(LineState &State, bool NewLine) {
-  if (Style.LambdaBodyIndentation == FormatStyle::LBI_OuterScope &&
-      State.NextToken->is(TT_LambdaLBrace) &&
-      !State.Line->MightBeFunctionDecl) {
+  if (isOuterScopeLambda(State, *State.NextToken, Style) &&
+      (!State.Line->MightBeFunctionDecl ||
+       State.NextToken == State.LambdaWithHeaderOnLine)) {
     const auto Indent = Style.IndentWidth * Style.BraceWrapping.IndentBraces;
     State.Stack.back().NestedBlockIndent = State.FirstIndent + Indent;
   }

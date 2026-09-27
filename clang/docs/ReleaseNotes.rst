@@ -1196,6 +1196,10 @@ clang-format
 - Adds ``BreakAfterAssignment`` option for forcing a line break after a
   top-level assignment operator when its right-hand side exceeds the column
   limit.
+- Adds ``LambdaHeaderOnStatementLine`` option for keeping the header of a
+  lambda that is the last argument of a statement on the statement line, with
+  the lambda body indented relative to the statement, either for assignments
+  only (``IfFitsOnAssignment``) or for all statements (``IfFitsAlways``).
 - Adds ``BreakBeforeTemplateCloser`` option.
 - Adds ``BinPackLongBracedList`` option to override bin packing options in
   long (20 item or more) braced list initializer lists.

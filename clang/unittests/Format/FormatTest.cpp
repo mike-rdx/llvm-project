@@ -7883,6 +7883,14 @@ TEST_F(FormatTest, BreakAfterAssignmentUsesRightHandSideLength) {
                "});",
                Style);
 
+  Style.ColumnLimit = 50;
+  verifyFormat("value = run([] {\n"
+               "  return someLongValueName + otherLongValueName;\n"
+               "});",
+               "value = run([] { return someLongValueName + "
+               "otherLongValueName; });",
+               Style);
+
   Style.ColumnLimit = 60;
   verifyFormat("std::vector<int> values = {\n"
                "    firstVeryLongElementName, secondVeryLongElementName,\n"

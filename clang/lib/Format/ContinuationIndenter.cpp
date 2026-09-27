@@ -165,7 +165,8 @@ static bool mustBreakAfterAssignment(const LineState &State,
   const FormatToken &Current = *State.NextToken;
   const FormatToken &Previous = *Current.Previous;
   const FormatToken *End = Previous.AssignmentExpressionEnd;
-  if (!End || !Current.CanBreakBefore ||
+  if (!End || State.NoLineBreak || State.Stack.back().NoLineBreak ||
+      !Current.CanBreakBefore ||
       Current.isOneOf(tok::l_brace, TT_LambdaLSquare)) {
     return false;
   }

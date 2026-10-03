@@ -399,8 +399,26 @@ static void PutOpenMPRequirements(
 // Directives defined by plugins whose subject this module declares, so that a
 // scope using the module sees them too. Written in canonical form, always
 // naming the subject (which a directive in a subprogram may leave implicit).
+// A directive in a module procedure may name what is not visible in the
+// module (e.g. an internal procedure or a dummy argument); it is left out, as
+// it could not be read back.
 static void PutPluginDirectives(
     llvm::raw_ostream &os, const Scope &scope, SemanticsContext &context) {
+  // Whether a name argument means the same in the module as in the
+  // directive.
+  auto isVisible{[&](const Symbol &symbol) {
+    const Symbol *found{scope.FindSymbol(symbol.name())};
+    if (!found) {
+      return false;
+    }
+    const Symbol &ultimate{found->GetUltimate()};
+    if (const auto *generic{ultimate.detailsIf<GenericDetails>()};
+        generic && generic->specific()) {
+      // The directive's name stands for the specific procedure.
+      return &generic->specific()->GetUltimate() == &symbol.GetUltimate();
+    }
+    return &ultimate == &symbol.GetUltimate();
+  }};
   for (const auto &[subject, directive, fromModFile] :
       context.GetPluginDirectives()) {
     if (&subject->owner() != &scope) {
@@ -408,34 +426,50 @@ static void PutPluginDirectives(
     }
     const auto &[prefix, keyword, args]{
         std::get<parser::CompilerDirective::Plugin>(directive->u).t};
-    os << "!dir$ " << prefix.ToString() << ' ' << keyword.ToString() << '(';
+    std::string buf;
+    llvm::raw_string_ostream line{buf};
+    line << "!dir$ " << prefix.ToString() << ' ' << keyword.ToString() << '(';
     if (subject->has<CommonBlockDetails>()) {
-      os << '/' << subject->name().ToString() << '/';
+      line << '/' << subject->name().ToString() << '/';
     } else {
-      os << subject->name().ToString();
+      line << subject->name().ToString();
     }
+    const parser::Name *hidden{nullptr};
     for (const parser::CompilerDirective::Plugin::Arg &arg : args) {
       const auto &argKeyword{std::get<0>(arg.t)};
       if (!argKeyword) {
         continue; // the subject, written above
       }
-      os << ", " << argKeyword->ToString() << '=';
+      line << ", " << argKeyword->ToString() << '=';
       common::visit(
           common::visitors{
               [&](const parser::Name &n) {
-                os << (n.symbol ? n.symbol->name().ToString() : n.ToString());
+                if (n.symbol && !isVisible(*n.symbol)) {
+                  hidden = &n;
+                }
+                line << (n.symbol ? n.symbol->name().ToString() : n.ToString());
               },
               [&](const parser::CompilerDirective::Plugin::CommonBlock &c) {
-                os << '/' << c.v.ToString() << '/';
+                if (!scope.FindCommonBlockInVisibleScopes(c.v.source)) {
+                  hidden = &c.v;
+                }
+                line << '/' << c.v.ToString() << '/';
               },
-              [&](std::uint64_t n) { os << n; },
+              [&](std::uint64_t n) { line << n; },
               [&](const std::string &str) {
-                os << parser::QuoteCharacterLiteral(str);
+                line << parser::QuoteCharacterLiteral(str);
               },
           },
           std::get<1>(arg.t));
     }
-    os << ")\n";
+    if (hidden) {
+      context.Warn(common::UsageWarning::IgnoredDirective, hidden->source,
+          "This '%s %s' directive is not written to the module file of '%s', where '%s' is not visible; units that use the module do not see it"_warn_en_US,
+          prefix.ToString(), keyword.ToString(), scope.GetName().value(),
+          hidden->source);
+      continue;
+    }
+    os << buf << ")\n";
   }
 }
 

@@ -11489,24 +11489,67 @@ void ResolveNamesVisitor::ResolvePluginDirective(
     return symbol.has<SubprogramNameDetails>() ||
         IsProcedure(symbol.GetUltimate());
   }};
-  auto checkKind{[&](const parser::Name &name, const Symbol &symbol,
-                     common::PluginDirectiveArgKind kind) {
-    bool proc{isProcedure(symbol)};
-    if (kind == common::PluginDirectiveArgKind::Procedure && !proc) {
-      Say(name, "'%s' is not a procedure"_err_en_US);
+  // Check that a name stands for a procedure (kind Procedure), a variable
+  // (kind Variable) or either (no kind), as lowering can refer to it: a
+  // subprogram or an external procedure, not a dummy procedure, a procedure
+  // pointer, a statement function or an intrinsic; a variable, not e.g. a
+  // derived type or a namelist group. A generic name stands for its specific
+  // procedure of the same name, which replaces it in the name's symbol.
+  auto checkKind{[&](const parser::Name &name, const Symbol *&symbol,
+                     std::optional<common::PluginDirectiveArgKind> kind) {
+    const Symbol &ultimate{symbol->GetUltimate()};
+    if (!isProcedure(*symbol)) {
+      if (kind == common::PluginDirectiveArgKind::Procedure) {
+        Say(name, "'%s' is not a procedure"_err_en_US);
+        return false;
+      }
+      if (!ultimate.has<ObjectEntityDetails>() &&
+          !ultimate.has<EntityDetails>()) {
+        Say(name, "'%s' is not a variable"_err_en_US);
+        return false;
+      }
+      return true;
+    }
+    if (kind == common::PluginDirectiveArgKind::Variable) {
+      Say(name, "'%s' is not a variable"_err_en_US);
       return false;
     }
-    if (kind == common::PluginDirectiveArgKind::Variable && proc) {
-      Say(name, "'%s' is not a variable"_err_en_US);
+    if (const auto *generic{ultimate.detailsIf<GenericDetails>()}) {
+      if (!generic->specific()) {
+        Say(name,
+            "'%s' is a generic procedure without a specific procedure of the same name"_err_en_US);
+        return false;
+      }
+      symbol = generic->specific();
+      name.symbol = const_cast<Symbol *>(symbol);
+      return true;
+    }
+    if (IsDummy(ultimate) || IsProcedurePointer(ultimate) ||
+        ultimate.test(Symbol::Flag::StmtFunction) ||
+        ultimate.attrs().test(Attr::INTRINSIC)) {
+      Say(name, "'%s' must be a subprogram or an external procedure"_err_en_US);
       return false;
     }
     return true;
   }};
-  auto resolve{[&](const parser::Name &name) -> Symbol * {
+  auto resolve{[&](const parser::Name &name,
+                   std::optional<common::PluginDirectiveArgKind> kind)
+                   -> const Symbol * {
     Symbol *symbol{FindSymbol(name)};
     if (!symbol) {
       Say(name, "'%s' is not declared"_err_en_US);
       return nullptr;
+    }
+    // In a function without a RESULT clause, its name is its result
+    // variable; where a procedure may be meant, it is the function.
+    if (kind != common::PluginDirectiveArgKind::Variable) {
+      const Symbol &ultimate{symbol->GetUltimate()};
+      if (IsFunctionResult(ultimate)) {
+        if (const Symbol *function{ultimate.owner().symbol()};
+            function && function->name() == ultimate.name()) {
+          symbol = const_cast<Symbol *>(function);
+        }
+      }
     }
     name.symbol = symbol;
     return symbol;
@@ -11522,6 +11565,12 @@ void ResolveNamesVisitor::ResolvePluginDirective(
   }};
 
   // The subject: a leading positional name, or the enclosing subprogram.
+  std::optional<common::PluginDirectiveArgKind> subjectKind;
+  if (spec->subject == common::PluginDirectiveSubject::Procedure) {
+    subjectKind = common::PluginDirectiveArgKind::Procedure;
+  } else if (spec->subject == common::PluginDirectiveSubject::Variable) {
+    subjectKind = common::PluginDirectiveArgKind::Variable;
+  }
   auto it{args.begin()};
   const Symbol *subject{nullptr};
   const parser::Name *subjectNamePtr{nullptr};
@@ -11529,7 +11578,7 @@ void ResolveNamesVisitor::ResolvePluginDirective(
     const auto &value{std::get<1>(it->t)};
     if (const auto *name{std::get_if<parser::Name>(&value)}) {
       subjectNamePtr = name;
-      subject = resolve(*name);
+      subject = resolve(*name, subjectKind);
     } else if (const auto *common{
                    std::get_if<parser::CompilerDirective::Plugin::CommonBlock>(
                        &value)}) {
@@ -11558,11 +11607,12 @@ void ResolveNamesVisitor::ResolvePluginDirective(
     return;
   }
   const parser::Name &subjectName{subjectNamePtr ? *subjectNamePtr : keyword};
-  if (spec->subject != common::PluginDirectiveSubject::Any &&
-      !checkKind(subjectName, *subject,
-          spec->subject == common::PluginDirectiveSubject::Procedure
-              ? common::PluginDirectiveArgKind::Procedure
-              : common::PluginDirectiveArgKind::Variable)) {
+  if (subject->has<CommonBlockDetails>()) {
+    if (subjectKind == common::PluginDirectiveArgKind::Procedure) {
+      Say(subjectName, "'%s' is not a procedure"_err_en_US);
+      return;
+    }
+  } else if (!checkKind(subjectName, subject, subjectKind)) {
     return;
   }
 
@@ -11603,8 +11653,8 @@ void ResolveNamesVisitor::ResolvePluginDirective(
     case common::PluginDirectiveArgKind::Procedure:
     case common::PluginDirectiveArgKind::Variable:
       if (const auto *name{std::get_if<parser::Name>(&value)}) {
-        const Symbol *symbol{resolve(*name)};
-        ok &= symbol && checkKind(*name, *symbol, argSpec->kind);
+        const Symbol *symbol{resolve(*name, argSpec->kind)};
+        ok &= symbol && checkKind(*name, symbol, argSpec->kind);
       } else if (const auto *common{std::get_if<
                      parser::CompilerDirective::Plugin::CommonBlock>(&value)};
           common && argSpec->kind == common::PluginDirectiveArgKind::Variable) {
@@ -11640,6 +11690,12 @@ void ResolveNamesVisitor::ResolvePluginDirective(
     }
   }
   if (ok) {
+    // A name of the host (e.g. a procedure's own name, in it) is host
+    // associated; the directive is on the host's symbol, which a module file
+    // declares.
+    while (const auto *host{subject->detailsIf<HostAssocDetails>()}) {
+      subject = &host->symbol();
+    }
     context().AddPluginDirective(*subject, x,
         currScope().symbol() && currScope().symbol()->IsFromModFile());
   }

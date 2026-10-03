@@ -1422,9 +1422,30 @@ constexpr auto pluginDirectiveValue{
         std::uint64_t, std::string>>(space >> charLiteralConstantWithoutKind)};
 constexpr auto pluginDirectiveArg{construct<CompilerDirective::Plugin::Arg>(
     maybe(name / "="_tok), pluginDirectiveValue)};
-constexpr auto pluginDirective{
-    construct<CompilerDirective::Plugin>(PluginDirectivePrefix{}, name,
-        defaulted(parenthesized(optionalList(pluginDirectiveArg))))};
+// The arguments of a directive defined by a plugin. Once its prefix is
+// recognized, the directive is the plugin's: arguments that do not parse are
+// an error, not an unrecognized directive to ignore.
+struct PluginDirectiveArgs {
+  using resultType = std::list<CompilerDirective::Plugin::Arg>;
+  constexpr PluginDirectiveArgs() {}
+  std::optional<resultType> Parse(ParseState &state) const {
+    static constexpr auto args{
+        defaulted(parenthesized(optionalList(pluginDirectiveArg))) /
+        lookAhead(endOfStmt)};
+    const char *start{state.GetLocation()};
+    ParseState backtrack{state};
+    if (std::optional<resultType> result{args.Parse(state)}) {
+      return result;
+    }
+    state = std::move(backtrack);
+    SkipTo<'\n'>{}.Parse(state);
+    state.Say(CharBlock{start, state.GetLocation()},
+        "malformed argument list of a directive defined by a plugin"_err_en_US);
+    return resultType{};
+  }
+};
+constexpr auto pluginDirective{construct<CompilerDirective::Plugin>(
+    PluginDirectivePrefix{}, name, PluginDirectiveArgs{})};
 TYPE_PARSER(beginDirective >> some(letter) >> "$ "_tok >>
     sourced((construct<CompilerDirective>(pluginDirective) ||
                 construct<CompilerDirective>(ignore_tkr) ||

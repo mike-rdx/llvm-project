@@ -703,11 +703,28 @@ public:
   void lowerPluginDirectives() {
     mlir::ModuleOp module{getModuleOp()};
     mlir::MLIRContext *ctx{module.getContext()};
+    // What semantics lets a directive refer to: a subprogram or an external
+    // procedure, a variable, or a COMMON block. Nothing else has an operation
+    // (or even a mangled name).
+    auto isReferable{[](const Fortran::semantics::Symbol &sym) {
+      if (Fortran::semantics::IsProcedure(sym)) {
+        return !sym.has<Fortran::semantics::GenericDetails>() &&
+               !Fortran::semantics::IsDummy(sym) &&
+               !Fortran::semantics::IsProcedurePointer(sym) &&
+               !Fortran::semantics::IsStmtFunction(sym) &&
+               !sym.attrs().test(Fortran::semantics::Attr::INTRINSIC);
+      }
+      return sym.has<Fortran::semantics::ObjectEntityDetails>() ||
+             sym.has<Fortran::semantics::CommonBlockDetails>();
+    }};
     // The operation of a procedure or variable, declared if need be (as a
     // reference to it would): procedures, and variables of modules, which
     // may be another module's.
     auto getOrDeclare{[&](const Fortran::semantics::Symbol &sym)
                           -> mlir::Operation * {
+      if (!isReferable(sym)) {
+        return nullptr;
+      }
       if (mlir::Operation *op{module.lookupSymbol(mangleName(sym))}) {
         return op;
       }
@@ -729,9 +746,11 @@ public:
       // it does not use otherwise (e.g. an external procedure with an
       // interface body); a unit that sees it through a module file only for
       // those it uses.
-      mlir::Operation *target{fromModFile
-              ? module.lookupSymbol(mangleName(ultimate))
-              : getOrDeclare(ultimate)};
+      mlir::Operation *target{nullptr};
+      if (!fromModFile)
+        target = getOrDeclare(ultimate);
+      else if (isReferable(ultimate))
+        target = module.lookupSymbol(mangleName(ultimate));
       if (!target) {
         continue; // neither defined nor referenced here
       }

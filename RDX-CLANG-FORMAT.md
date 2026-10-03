@@ -24,6 +24,7 @@ Commits on `backport-pr-169160` on top of `llvmorg-21.1.8`:
 | `83b37e58` | `[clang-format] Guard forced assignment breaks` |
 | `35b84c76` | `[clang-format][NFC] Fix Defaulf typo in FormatTest` (the backported test did not compile) |
 | `c88ad7eb` | `[clang-format] Add LambdaHeaderOnStatementLine style option` |
+| `fc5ad20d` | `Add rdx clang-format documentation` (this file) |
 
 ## New options
 

@@ -176,6 +176,27 @@ static const FormatToken *getLambdaHeaderEnd(const FormatToken &LSquare,
   return nullptr;
 }
 
+// If LSquare introduces a lambda that is the right-hand side of a top-level
+// assignment and whose body's opening brace goes on a line of its own, returns
+// that brace: when the lambda's header starts a new line (after "="), the brace
+// and the body are aligned with that line instead of the statement.
+static const FormatToken *getStoredLambdaLBrace(const FormatToken &LSquare,
+                                                const FormatStyle &Style) {
+  if (Style.BreakAfterAssignment != FormatStyle::BAAS_IfOverLimit ||
+      !Style.BraceWrapping.BeforeLambdaBody ||
+      Style.LambdaBodyIndentation == FormatStyle::LBI_OuterScope ||
+      LSquare.isNot(TT_LambdaLSquare)) {
+    return nullptr;
+  }
+  const FormatToken *Assignment = LSquare.getPreviousNonComment();
+  if (!Assignment || !Assignment->AssignmentExpressionEnd)
+    return nullptr;
+  const FormatToken *HeaderEnd = getLambdaHeaderEnd(LSquare, Style);
+  if (!HeaderEnd || !HeaderEnd->Next || HeaderEnd->Next->isNot(TT_LambdaLBrace))
+    return nullptr;
+  return HeaderEnd->Next;
+}
+
 // Returns true if Current is inside the capture list of a lambda that is the
 // right-hand side of a top-level assignment, and the rest of the capture list,
 // with the following "(", still fits on the current line. Breaking there is not
@@ -1358,6 +1379,12 @@ unsigned ContinuationIndenter::addTokenOnNewLine(LineState &State,
 
   State.Column = getNewLineColumn(State);
 
+  // A stored lambda's header starts on this line: align its body with it.
+  if (const FormatToken *LBrace = getStoredLambdaLBrace(Current, Style)) {
+    State.StoredLambdaLBrace = LBrace;
+    State.StoredLambdaHeaderColumn = State.Column;
+  }
+
   // Add Penalty proportional to amount of whitespace away from FirstColumn
   // This tends to penalize several lines that are far-right indented,
   // and prefers a line-break prior to such a block, e.g:
@@ -1639,6 +1666,10 @@ unsigned ContinuationIndenter::getNewLineColumn(const LineState &State) {
            Style.IndentWidth;
   }
 
+  if (&Current == State.StoredLambdaLBrace) {
+    return State.StoredLambdaHeaderColumn +
+           (Style.BraceWrapping.IndentBraces ? Style.IndentWidth : 0);
+  }
   if (Style.BraceWrapping.BeforeLambdaBody &&
       Style.BraceWrapping.IndentBraces && Current.is(TT_LambdaLBrace)) {
     const auto From = isOuterScopeLambda(State, Current, Style)
@@ -2425,7 +2456,12 @@ void ContinuationIndenter::moveStatePastScopeCloser(LineState &State) {
 }
 
 void ContinuationIndenter::moveStateToNewBlock(LineState &State, bool NewLine) {
-  if (isOuterScopeLambda(State, *State.NextToken, Style) &&
+  if (NewLine && State.NextToken == State.StoredLambdaLBrace) {
+    // The body and the closing brace follow the line the header starts on.
+    const auto Indent = Style.IndentWidth * Style.BraceWrapping.IndentBraces;
+    State.Stack.back().NestedBlockIndent =
+        State.StoredLambdaHeaderColumn + Indent;
+  } else if (isOuterScopeLambda(State, *State.NextToken, Style) &&
       (!State.Line->MightBeFunctionDecl ||
        State.NextToken == State.LambdaWithHeaderOnLine)) {
     const auto Indent = Style.IndentWidth * Style.BraceWrapping.IndentBraces;

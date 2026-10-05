@@ -480,6 +480,15 @@ struct LineState {
   /// Does not need to be considered for memoization because it doesn't change.
   const FormatToken *LambdaKeptOnOneLineStart = nullptr;
 
+  /// The opening brace of the body of a lambda stored in a variable whose
+  /// header starts on a line of its own (after "="), or \c nullptr. The brace
+  /// and the body are aligned with that line (see
+  /// \c FormatStyle::BreakAfterAssignment).
+  const FormatToken *StoredLambdaLBrace = nullptr;
+
+  /// The column at which the header of \c StoredLambdaLBrace's lambda starts.
+  unsigned StoredLambdaHeaderColumn = 0;
+
   /// Comparison operator to be able to used \c LineState in \c map.
   bool operator<(const LineState &Other) const {
     if (NextToken != Other.NextToken)
@@ -494,6 +503,10 @@ struct LineState {
       return LowestLevelOnLine < Other.LowestLevelOnLine;
     if (StartOfStringLiteral != Other.StartOfStringLiteral)
       return StartOfStringLiteral < Other.StartOfStringLiteral;
+    if (StoredLambdaLBrace != Other.StoredLambdaLBrace)
+      return StoredLambdaLBrace < Other.StoredLambdaLBrace;
+    if (StoredLambdaHeaderColumn != Other.StoredLambdaHeaderColumn)
+      return StoredLambdaHeaderColumn < Other.StoredLambdaHeaderColumn;
     if (IgnoreStackForComparison || Other.IgnoreStackForComparison)
       return false;
     return Stack < Other.Stack;

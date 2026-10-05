@@ -2645,8 +2645,11 @@ the configuration (without a prefix: ``Auto``).
     current line, force a line break after the assignment operator.
     For a lambda expression only its header (captures through trailing
     return type) is measured, not its body; a break inside its captures is
-    then allowed only if the captures do not fit on the line. Assignments to
-    braced initializer lists and declarations with multiple declarators are
+    then allowed only if the captures do not fit on the line. If the header
+    then starts on a line of its own and ``BraceWrapping.BeforeLambdaBody``
+    is set, the body's braces are aligned with that line (not with
+    ``LambdaBodyIndentation: OuterScope``). Assignments to braced
+    initializer lists and declarations with multiple declarators are
     excluded.
 
 

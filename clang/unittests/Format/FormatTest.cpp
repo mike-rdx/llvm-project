@@ -7991,16 +7991,16 @@ TEST_F(FormatTest, BreakAfterAssignmentMeasuresStoredLambdaHeader) {
                Style);
 
   // With the body's brace on its own line, the brace is not part of the
-  // header and stays at the statement's indentation.
+  // header; it is aligned with the line the header starts on.
   FormatStyle Allman = Style;
   Allman.BreakBeforeBraces = FormatStyle::BS_Allman;
   verifyFormat("auto callbackWithLongName =\n"
                "    [this, &firstValue, &secondValue](\n"
                "        int firstIndex, int secondIndex)\n"
-               "{\n"
-               "  consume(firstIndex);\n"
-               "  consume(secondIndex);\n"
-               "};",
+               "    {\n"
+               "      consume(firstIndex);\n"
+               "      consume(secondIndex);\n"
+               "    };",
                TooLongAfterAssignment, Allman);
 
   // The header is found even when the assignment expression ends before the
@@ -8030,6 +8030,83 @@ TEST_F(FormatTest, BreakAfterAssignmentMeasuresStoredLambdaHeader) {
                "  consume(index);\n"
                "};",
                FitsAfterAssignment, Style);
+}
+
+TEST_F(FormatTest, BreakAfterAssignmentAlignsStoredLambdaBody) {
+  FormatStyle Style = getLLVMStyleWithColumns(60);
+  Style.BreakAfterAssignment = FormatStyle::BAAS_IfOverLimit;
+  Style.BreakBeforeBinaryOperators = FormatStyle::BOS_NonAssignment;
+  Style.AlignAfterOpenBracket = FormatStyle::BAS_AlwaysBreak;
+  Style.BinPackArguments = true;
+  Style.BreakBeforeBraces = FormatStyle::BS_Allman;
+
+  // The header is on the statement line: the body follows the statement.
+  verifyFormat("auto callback = [this](int index)\n"
+               "{\n"
+               "  consume(index);\n"
+               "  consume(index);\n"
+               "};",
+               Style);
+
+  // The header starts on a line of its own: the brace, the body and the
+  // closing brace follow that line.
+  const StringRef Staircase =
+      "auto callbackWithLongName = [this, &firstValue, &secondValue](int "
+      "index) { consume(index); consume(index); };";
+  verifyFormat("auto callbackWithLongName =\n"
+               "    [this, &firstValue, &secondValue](int index)\n"
+               "    {\n"
+               "      consume(index);\n"
+               "      consume(index);\n"
+               "    };",
+               Staircase, Style);
+  verifyFormat("auto callbackWithLongName =\n"
+               "    [this, &firstValue](int index) noexcept -> bool\n"
+               "    {\n"
+               "      consume(index);\n"
+               "      return true;\n"
+               "    };",
+               "auto callbackWithLongName = [this, &firstValue](int index) "
+               "noexcept -> bool { consume(index); return true; };",
+               Style);
+
+  // A lambda in the body keeps its own layout, relative to the aligned body.
+  const StringRef Nested =
+      "auto callbackWithLongName = [this, &firstValue, &secondValue](int "
+      "index) { auto inner = [index]() { consume(index); consume(index); }; "
+      "inner(); };";
+  verifyFormat("auto callbackWithLongName =\n"
+               "    [this, &firstValue, &secondValue](int index)\n"
+               "    {\n"
+               "      auto inner = [index]()\n"
+               "      {\n"
+               "        consume(index);\n"
+               "        consume(index);\n"
+               "      };\n"
+               "      inner();\n"
+               "    };",
+               Nested, Style);
+
+  // OuterScope asks for the body at the statement's indentation.
+  FormatStyle OuterScope = Style;
+  OuterScope.LambdaBodyIndentation = FormatStyle::LBI_OuterScope;
+  verifyFormat("auto callbackWithLongName =\n"
+               "    [this, &firstValue, &secondValue](int index)\n"
+               "{\n"
+               "  consume(index);\n"
+               "  consume(index);\n"
+               "};",
+               Staircase, OuterScope);
+
+  // Never keeps the previous layout.
+  Style.BreakAfterAssignment = FormatStyle::BAAS_Never;
+  verifyFormat("auto callbackWithLongName =\n"
+               "    [this, &firstValue, &secondValue](int index)\n"
+               "{\n"
+               "  consume(index);\n"
+               "  consume(index);\n"
+               "};",
+               Staircase, Style);
 }
 
 TEST_F(FormatTest, LambdaHeaderOnStatementLine) {

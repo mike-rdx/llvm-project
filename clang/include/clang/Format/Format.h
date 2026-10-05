@@ -1621,8 +1621,11 @@ struct FormatStyle {
     BAAS_Never,
     /// If the right-hand side of a top-level assignment does not fit on the
     /// current line, force a line break after the assignment operator.
-    /// Assignments to braced initializer lists or lambda expressions and
-    /// declarations with multiple declarators are excluded.
+    /// For a lambda expression only its header (captures through trailing
+    /// return type) is measured, not its body; a break inside its captures is
+    /// then allowed only if the captures do not fit on the line. Assignments to
+    /// braced initializer lists and declarations with multiple declarators are
+    /// excluded.
     BAAS_IfOverLimit,
   };
 

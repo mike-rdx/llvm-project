@@ -7929,6 +7929,90 @@ TEST_F(FormatTest, BreakAfterAssignmentSkipsFunctionSpecifiersAndDeclarators) {
                Style);
 }
 
+TEST_F(FormatTest, BreakAfterAssignmentMeasuresStoredLambdaHeader) {
+  FormatStyle Style = getLLVMStyleWithColumns(60);
+  Style.BreakAfterAssignment = FormatStyle::BAAS_IfOverLimit;
+  Style.BreakBeforeBinaryOperators = FormatStyle::BOS_NonAssignment;
+  Style.AlignAfterOpenBracket = FormatStyle::BAS_AlwaysBreak;
+  Style.BinPackArguments = true;
+
+  // The header fits on the statement line: no break after the assignment.
+  verifyFormat("auto callback = [this](int index) {\n"
+               "  consume(index);\n"
+               "  consume(index);\n"
+               "};",
+               Style);
+
+  // The header fits only on a line of its own: break after the assignment
+  // instead of inside the captures.
+  const StringRef FitsAfterAssignment =
+      "auto callbackWithLongName = [this, &firstValue, &secondValue](int "
+      "index) { consume(index); consume(index); };";
+  verifyFormat("auto callbackWithLongName =\n"
+               "    [this, &firstValue, &secondValue](int index) {\n"
+               "      consume(index);\n"
+               "      consume(index);\n"
+               "    };",
+               FitsAfterAssignment, Style);
+
+  // The header doesn't fit even on a line of its own: break after the
+  // assignment, then after "](" while the captures fit on the line.
+  const StringRef TooLongAfterAssignment =
+      "auto callbackWithLongName = [this, &firstValue, &secondValue](int "
+      "firstIndex, int secondIndex) { consume(firstIndex); "
+      "consume(secondIndex); };";
+  verifyFormat("auto callbackWithLongName =\n"
+               "    [this, &firstValue, &secondValue](\n"
+               "        int firstIndex, int secondIndex) {\n"
+               "      consume(firstIndex);\n"
+               "      consume(secondIndex);\n"
+               "    };",
+               TooLongAfterAssignment, Style);
+
+  // The captures alone don't fit on a line: they are wrapped.
+  const StringRef LongCaptures =
+      "auto callback = [this, &firstVeryLongCapture, &secondVeryLongCapture, "
+      "&thirdCapture](int index) { consume(index); consume(index); };";
+  verifyFormat("auto callback =\n"
+               "    [this, &firstVeryLongCapture, &secondVeryLongCapture,\n"
+               "     &thirdCapture](int index) {\n"
+               "      consume(index);\n"
+               "      consume(index);\n"
+               "    };",
+               LongCaptures, Style);
+
+  // A lambda inside a call on the right-hand side is not affected.
+  verifyFormat("result =\n"
+               "    std::count_if(\n"
+               "        values.begin(), values.end(),\n"
+               "        [&limit](int value) { return value > limit; });",
+               "result = std::count_if(values.begin(), values.end(), "
+               "[&limit](int value) { return value > limit; });",
+               Style);
+
+  // With the body's brace on its own line, the brace is not part of the
+  // header and stays at the statement's indentation.
+  FormatStyle Allman = Style;
+  Allman.BreakBeforeBraces = FormatStyle::BS_Allman;
+  verifyFormat("auto callbackWithLongName =\n"
+               "    [this, &firstValue, &secondValue](\n"
+               "        int firstIndex, int secondIndex)\n"
+               "{\n"
+               "  consume(firstIndex);\n"
+               "  consume(secondIndex);\n"
+               "};",
+               TooLongAfterAssignment, Allman);
+
+  // Never keeps the previous layout.
+  Style.BreakAfterAssignment = FormatStyle::BAAS_Never;
+  verifyFormat("auto callbackWithLongName = [this, &firstValue,\n"
+               "                             &secondValue](int index) {\n"
+               "  consume(index);\n"
+               "  consume(index);\n"
+               "};",
+               FitsAfterAssignment, Style);
+}
+
 TEST_F(FormatTest, LambdaHeaderOnStatementLine) {
   FormatStyle Style = getLLVMStyleWithColumns(60);
   Style.BreakBeforeBraces = FormatStyle::BS_Custom;

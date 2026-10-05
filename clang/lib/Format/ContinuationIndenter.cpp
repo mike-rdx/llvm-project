@@ -154,6 +154,73 @@ static bool mustBreakBinaryOperation(const FormatToken &Current,
               : isAlignableBinaryOperator)(Current);
 }
 
+// Returns the last token of the header of the lambda introduced by LSquare
+// (its captures, parameters, specifiers and trailing return type), or nullptr
+// if the lambda's body cannot be found before End. With
+// BraceWrapping.BeforeLambdaBody the body's opening brace starts a new line and
+// is not part of the header.
+static const FormatToken *getLambdaHeaderEnd(const FormatToken &LSquare,
+                                             const FormatToken &End,
+                                             const FormatStyle &Style) {
+  if (!LSquare.MatchingParen)
+    return nullptr;
+  for (const FormatToken *Tok = LSquare.MatchingParen->Next; Tok;
+       Tok = Tok->Next) {
+    if (Tok->is(TT_LambdaLBrace))
+      return Style.BraceWrapping.BeforeLambdaBody ? Tok->Previous : Tok;
+    if (Tok == &End || Tok->isOneOf(tok::semi, tok::l_brace))
+      return nullptr;
+    if (Tok->opensScope() && Tok->MatchingParen)
+      Tok = Tok->MatchingParen;
+  }
+  return nullptr;
+}
+
+// Returns true if Current is inside the capture list of a lambda that is the
+// right-hand side of a top-level assignment, and the rest of the capture list,
+// with the following "(", still fits on the current line. Breaking there is not
+// allowed, so a long header breaks after "](" instead of inside the captures.
+static bool isInFittingStoredLambdaCaptures(const LineState &State,
+                                            const FormatToken &Current,
+                                            const FormatStyle &Style,
+                                            unsigned ColumnLimit) {
+  if (Style.BreakAfterAssignment != FormatStyle::BAAS_IfOverLimit ||
+      Style.ColumnLimit == 0 || Current.MustBreakBefore) {
+    return false;
+  }
+
+  // The innermost unclosed bracket before Current.
+  const FormatToken *Opener = nullptr;
+  for (const FormatToken *Tok = Current.Previous; Tok; Tok = Tok->Previous) {
+    if (Tok->closesScope() && Tok->MatchingParen) {
+      Tok = Tok->MatchingParen;
+      continue;
+    }
+    if (Tok->opensScope()) {
+      Opener = Tok;
+      break;
+    }
+  }
+  if (!Opener || Opener->isNot(TT_LambdaLSquare) || !Opener->MatchingParen)
+    return false;
+  const FormatToken *Assignment = Opener->getPreviousNonComment();
+  if (!Assignment || !Assignment->AssignmentExpressionEnd)
+    return false;
+
+  const FormatToken *Last = Opener->MatchingParen;
+  if (Last->Next && Last->Next->is(tok::l_paren))
+    Last = Last->Next;
+  unsigned Column = State.Column;
+  for (const FormatToken *Tok = &Current; Tok; Tok = Tok->Next) {
+    if (Tok != &Current && Tok->MustBreakBefore)
+      return false;
+    Column += Tok->SpacesRequiredBefore + Tok->ColumnWidth;
+    if (Tok == Last)
+      return Column <= ColumnLimit;
+  }
+  return false;
+}
+
 static bool mustBreakAfterAssignment(const LineState &State,
                                      const FormatStyle &Style,
                                      unsigned ColumnLimit) {
@@ -166,9 +233,17 @@ static bool mustBreakAfterAssignment(const LineState &State,
   const FormatToken &Previous = *Current.Previous;
   const FormatToken *End = Previous.AssignmentExpressionEnd;
   if (!End || State.NoLineBreak || State.Stack.back().NoLineBreak ||
-      !Current.CanBreakBefore ||
-      Current.isOneOf(tok::l_brace, TT_LambdaLSquare)) {
+      !Current.CanBreakBefore || Current.is(tok::l_brace)) {
     return false;
+  }
+  // A lambda stored in a variable is measured only up to the end of its
+  // header: its body goes on lines of its own and would always exceed the
+  // limit. If the header doesn't fit after the assignment, the header moves to
+  // the next line instead of being broken inside its captures or parameters.
+  if (Current.is(TT_LambdaLSquare)) {
+    End = getLambdaHeaderEnd(Current, *End, Style);
+    if (!End)
+      return false;
   }
 
   unsigned Column = State.Column;
@@ -498,6 +573,10 @@ bool ContinuationIndenter::canBreak(const LineState &State) {
     return false;
   if (isBraceOfLambdaWithHeaderOnLine(State, Current))
     return true;
+  if (isInFittingStoredLambdaCaptures(State, Current, Style,
+                                      getColumnLimit(State))) {
+    return false;
+  }
   if (!Current.CanBreakBefore && !(CurrentState.BreakBeforeClosingBrace &&
                                    Current.closesBlockOrBlockTypeList(Style))) {
     return false;

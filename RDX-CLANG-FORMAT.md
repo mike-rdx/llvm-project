@@ -25,6 +25,9 @@ Commits on `backport-pr-169160` on top of `llvmorg-21.1.8`:
 | `35b84c76` | `[clang-format][NFC] Fix Defaulf typo in FormatTest` (the backported test did not compile) |
 | `c88ad7eb` | `[clang-format] Add LambdaHeaderOnStatementLine style option` |
 | `fc5ad20d` | `Add rdx clang-format documentation` (this file) |
+| `ccf6c2ff` | `[clang-format] Measure only the header of a stored lambda in BreakAfterAssignment` |
+| `28e3a734` | `[clang-format] Find stored lambda headers ending in noexcept and a trailing return type` |
+| `0923ff11` | `[clang-format] Align a stored lambda's body with its header's line` |
 
 ## New options
 
@@ -62,10 +65,45 @@ The break is forced only when all of the following hold:
   default argument, or later in a chain like `a = b = c`);
 - the statement does not declare several variables (`int a = 1, b = 2;`);
 - it is not `= 0`, `= default` or `= delete` after a function declaration;
-- the right-hand side does not start with `{` or with a lambda;
+- the right-hand side does not start with `{`;
 - a line break is allowed at that point;
 - the right-hand side, measured from after the `=` to the end of the expression, does not fit.
   Trailing comments, lambda bodies and the final `;` are not counted.
+
+For a lambda stored in a variable, only the lambda's header is measured: its captures, parameters,
+specifiers and trailing return type, without the body. If the header doesn't fit after the `=`, it
+moves to the next line ("staircase"). If it doesn't fit there either, it breaks after `](`, with
+the parameters one level deeper; a break inside the captures is allowed only if the capture list
+itself doesn't fit on the line. With `BraceWrapping.BeforeLambdaBody`, the body's `{`, the body and
+the closing `};` are then aligned with the line the header starts on, as hand-written rdx code does
+(not with `LambdaBodyIndentation: OuterScope`, which keeps them at the statement's indentation).
+
+```cpp
+// before
+auto updateSelectedRow = [this, &selection_model,
+						  &visible_row_indexes](const QModelIndex &index, const SelectionMode mode) -> bool
+{
+	return apply(index, mode);
+};
+auto writeRowToReport = [this, &report_stream, &column_widths, first_visible_column_index](
+							const ReportRow &row, const QStringView row_prefix, const QStringView row_suffix)
+{
+	write(row);
+};
+
+// IfOverLimit
+auto updateSelectedRow =
+	[this, &selection_model, &visible_row_indexes](const QModelIndex &index, const SelectionMode mode) -> bool
+	{
+		return apply(index, mode);
+	};
+auto writeRowToReport =
+	[this, &report_stream, &column_widths, first_visible_column_index](
+		const ReportRow &row, const QStringView row_prefix, const QStringView row_suffix)
+	{
+		write(row);
+	};
+```
 
 ### LambdaHeaderOnStatementLine
 
@@ -163,12 +201,14 @@ cmake --build build-codex --config Release --target clang-format FormatTests
 
 ## Tests
 
-All 1,221 `FormatTests` pass. The new options are covered by these tests in
+All 1,223 `FormatTests` pass. The new options are covered by these tests in
 `clang/unittests/Format/FormatTest.cpp`:
 
 | Test | Covers |
 |---|---|
 | `BreakAfterAssignment`, `BreakAfterAssignmentUsesRightHandSideLength`, `BreakAfterAssignmentSkipsFunctionSpecifiersAndDeclarators` | the forced break, the right-hand-side measurement, the exclusions |
+| `BreakAfterAssignmentMeasuresStoredLambdaHeader` | stored lambdas: header on the statement line, staircase, break after `](`, captures too long for a line, a lambda inside a call, Allman braces, `noexcept -> T`, `Never` |
+| `BreakAfterAssignmentAlignsStoredLambdaBody` | the body's braces follow the header's line: header on the statement line, staircase, `noexcept -> bool`, a nested lambda, `OuterScope`, `Never` |
 | `LambdaHeaderOnStatementLine` | `Never` vs. `IfFitsAlways`, trailing return types, `connect()`, nested statements, short bodies, `-> double &`, parentheses around the lambda |
 | `LambdaHeaderOnStatementLineOnAssignment` | assignments get the layout, plain calls do not |
 | `LambdaHeaderOnStatementLineSkipsNonFittingHeaders` | header of exactly the column limit vs. one more, lambda not the last argument, comment in the header |
@@ -234,12 +274,18 @@ Measured on the C++ files of the main rdx solution with the rdx configuration:
   | One-line lambdas | 585 | 586 | 601 |
   | Folded `{ ...; }` bodies | 160 | 154 | 92 |
 
+- Stored lambdas (`BreakAfterAssignment` measuring only the lambda header): 39 headers that the
+  previous build broke inside the captures or parameters now use the staircase. Of these, 9 fit on
+  the line after `=`; the others break after `](`, except two whose capture lists don't fit on any
+  line. With the body's braces aligned with the header's line, all 142 staircase lambdas get the
+  `{` under the `[`; hand-written rdx code does the same in 134 of 156 cases. Compared with the
+  previous build, only stored-lambda statements change (110 of 381 files containing such lambdas,
+  none of 300 other files).
 - No crashes, no non-whitespace changes, and no new files that need a second formatting pass.
 
 ## Known limitations
 
-- Long stored lambdas whose header does not fit even on the next line (38 cases in rdx) wrap
-  inside the capture list instead of breaking between the captures and the parameter list.
+- A lambda capture list that doesn't fit on a line by itself wraps inside the brackets.
 - Some files need two formatting passes because of comment re-wrapping. This is upstream
   behaviour, not caused by these changes.
 

@@ -8003,6 +8003,25 @@ TEST_F(FormatTest, BreakAfterAssignmentMeasuresStoredLambdaHeader) {
                "};",
                TooLongAfterAssignment, Allman);
 
+  // The header is found even when the assignment expression ends before the
+  // body, as after "noexcept -> T".
+  FormatStyle Wide = Style;
+  Wide.ColumnLimit = 120;
+  Wide.BinPackParameters = FormatStyle::BPPS_BinPack;
+  verifyFormat("auto computeInChunk =\n"
+               "    [this](\n"
+               "        const TraceArrayValues &chunk_with_a_rather_long_name, "
+               "const uint begin_abs_trace_index,\n"
+               "        const uint n_traces) noexcept -> double {\n"
+               "  use(chunk);\n"
+               "  return 0.0;\n"
+               "};",
+               "auto computeInChunk = [this](const TraceArrayValues "
+               "&chunk_with_a_rather_long_name, const uint "
+               "begin_abs_trace_index, const uint n_traces) noexcept -> double "
+               "{ use(chunk); return 0.0; };",
+               Wide);
+
   // Never keeps the previous layout.
   Style.BreakAfterAssignment = FormatStyle::BAAS_Never;
   verifyFormat("auto callbackWithLongName = [this, &firstValue,\n"

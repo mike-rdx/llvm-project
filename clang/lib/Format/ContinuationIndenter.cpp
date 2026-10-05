@@ -156,11 +156,11 @@ static bool mustBreakBinaryOperation(const FormatToken &Current,
 
 // Returns the last token of the header of the lambda introduced by LSquare
 // (its captures, parameters, specifiers and trailing return type), or nullptr
-// if the lambda's body cannot be found before End. With
-// BraceWrapping.BeforeLambdaBody the body's opening brace starts a new line and
-// is not part of the header.
+// if the lambda's body cannot be found. With BraceWrapping.BeforeLambdaBody the
+// body's opening brace starts a new line and is not part of the header. The
+// search does not stop at the end of an enclosing assignment expression, which
+// may end before the body (e.g. after "noexcept -> T").
 static const FormatToken *getLambdaHeaderEnd(const FormatToken &LSquare,
-                                             const FormatToken &End,
                                              const FormatStyle &Style) {
   if (!LSquare.MatchingParen)
     return nullptr;
@@ -168,7 +168,7 @@ static const FormatToken *getLambdaHeaderEnd(const FormatToken &LSquare,
        Tok = Tok->Next) {
     if (Tok->is(TT_LambdaLBrace))
       return Style.BraceWrapping.BeforeLambdaBody ? Tok->Previous : Tok;
-    if (Tok == &End || Tok->isOneOf(tok::semi, tok::l_brace))
+    if (Tok->isOneOf(tok::semi, tok::l_brace))
       return nullptr;
     if (Tok->opensScope() && Tok->MatchingParen)
       Tok = Tok->MatchingParen;
@@ -241,7 +241,7 @@ static bool mustBreakAfterAssignment(const LineState &State,
   // limit. If the header doesn't fit after the assignment, the header moves to
   // the next line instead of being broken inside its captures or parameters.
   if (Current.is(TT_LambdaLSquare)) {
-    End = getLambdaHeaderEnd(Current, *End, Style);
+    End = getLambdaHeaderEnd(Current, Style);
     if (!End)
       return false;
   }

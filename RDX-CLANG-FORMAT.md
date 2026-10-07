@@ -1,7 +1,7 @@
 # rdx clang-format
 
 This fork of [llvm/llvm-project](https://github.com/llvm/llvm-project) carries a modified
-clang-format for the rdx code base. It adds two style options that the rdx coding rules need and
+clang-format for the rdx code base. It adds three style options that the rdx coding rules need and
 that upstream clang-format does not have, plus one backported upstream change, which the fork
 extends with a `WithoutName` sub-option and lambda return types.
 
@@ -33,6 +33,7 @@ Commits on `backport-pr-169160` on top of `llvmorg-21.1.8`:
 | `aa87b167` | `[clang-format] Treat lambda trailing return types as return types in ReturnType alignment` |
 | `1b1329d9` | `[clang-format] Add WithoutName to PointerAlignment and ReferenceAlignment` |
 | `c4d31089` | `[clang-format] Treat type aliases and arrays of pointers as WithoutName, but not ref-qualifiers` |
+| `5a9c8798` | `[clang-format] Add KeepBinaryOperatorLineBreaks style option` |
 
 ## New options
 
@@ -174,6 +175,52 @@ folded into `{ ...; }` on the next line nor split inside its capture list.
 
 The option requires `BraceWrapping.BeforeLambdaBody: true`.
 
+### KeepBinaryOperatorLineBreaks
+
+```yaml
+KeepBinaryOperatorLineBreaks: false   # default: unchanged behaviour
+KeepBinaryOperatorLineBreaks: true
+```
+
+Upstream clang-format chooses all line breaks of a long expression itself and ignores where the
+author put them, so an expression written one logical part per line is re-packed to fill each
+line. With `true`, a line break that the input has next to a binary operator is kept:
+
+```cpp
+// input, and the result with true
+log_text =
+	u'\t' % Dialog::tr("Derivative") % line_separator %
+	u'\t' % Dialog::tr("Windows size") % u": " % QString(m_window_size_templ) % line_separator %
+	u'\t' % Dialog::tr("Threshold ratio") % u": " % QString(m_thresh_ratio_templ);
+
+// false
+log_text =
+	u'\t' % Dialog::tr("Derivative") % line_separator % u'\t' % Dialog::tr("Windows size") % u": " %
+	QString(m_window_size_templ) % line_separator % u'\t' % Dialog::tr("Threshold ratio") % u": " %
+	QString(m_thresh_ratio_templ);
+```
+
+- Binary operators are those such as `%`, `+`, `&&`, `==`, `|` or `<<`. Line breaks at
+  assignments, commas and `?:` are not kept; those are formatted as before.
+- The break is kept on the side of the operator that `BreakBeforeBinaryOperators` selects: an
+  input break before the operator moves after it with `None`, and vice versa.
+- It applies only when the line, from its start through the end of the expression that contains
+  the operator (up to its closing bracket, or the whole statement), doesn't fit in the column
+  limit. Comments after the expression don't count. An expression that fits on one line is
+  formatted as usual. An expression with a forced line break inside (e.g. after a `//` comment)
+  never fits, so its breaks are kept.
+- A break the line has anyway on the other side of the operator (at an empty line or a comment of
+  the input) is not repeated on its side, so no operator is left alone on a line.
+- Code formatted with the option off is unchanged by formatting it again with the option on: the
+  formatter keeps its own breaks. So code formatted by the agent scripts (option off) still passes
+  a check with the option on.
+- Not breaking at such a place is penalized (1000), not forbidden: a hard rule let the optimizer
+  escape into layouts where the break wasn't allowed at all, with odd results and output that
+  changed on a second pass. Further breaks are still added where a line would exceed the limit,
+  and the indentation is normalized.
+- Old wraps are kept too: a line someone wrapped early stays wrapped there as long as it doesn't
+  exceed the limit.
+
 ### Pointer and reference alignment: return types (backport of PR #169160) and `WithoutName`
 
 `PointerAlignment` and `ReferenceAlignment` accept a struct with a `ReturnType` sub-option that
@@ -253,7 +300,7 @@ cmake --build build-codex --config Release --target clang-format FormatTests
 
 ## Tests
 
-All 1,225 `FormatTests` pass. The new options are covered by these tests in
+All 1,226 `FormatTests` pass. The new options are covered by these tests in
 `clang/unittests/Format/FormatTest.cpp`:
 
 | Test | Covers |
@@ -266,6 +313,7 @@ All 1,225 `FormatTests` pass. The new options are covered by these tests in
 | `LambdaHeaderOnStatementLineSkipsNonFittingHeaders` | header of exactly the column limit vs. one more, lambda not the last argument, comment in the header |
 | `LambdaHeaderOnStatementLineKeepsTrailingComment` | a `//` comment after the header: long and short bodies, `-> bool`, `[]` without parameters, the comment counted in the column limit, other comments (on a line of their own, block comment, inside the captures), `IfFitsOnAssignment` |
 | `LambdaHeaderOnStatementLineSkipsNonStatements` | default argument, type alias, `static_assert`, multi-line raw string, empty lambda |
+| `KeepBinaryOperatorLineBreaks` | default `false` re-packs; kept chain; break before the operator moved after it; joined when it fits; too-long input line wrapped further; condition; operand of a call argument; assignment, comma and `?:` breaks not kept; an empty line or comment before the operator; a trailing comment after a fitting and after a long expression; `BreakBeforeBinaryOperators: All` |
 | `ReturnTypeAlignment` | the backported `ReturnType` tests, plus lambda trailing return types |
 | `WithoutNameAlignment` | casts, template arguments, function types, `sizeof`, type aliases, arrays of pointers, unnamed parameters, `catch`; named declarations, structured bindings, attributes, ref-qualifiers and expressions unchanged; `ReturnType` precedence |
 
@@ -281,6 +329,7 @@ The rdx `.clang-format` enables the options of this fork:
 ```yaml
 BreakAfterAssignment: IfOverLimit
 LambdaHeaderOnStatementLine: IfFitsAlways
+KeepBinaryOperatorLineBreaks: true    # switched off by the rdx scripts for agent-written code
 PointerAlignment:
   Default: Right
   ReturnType: Left
@@ -338,6 +387,11 @@ Measured on the C++ files of the main rdx solution with the rdx configuration:
   `{` under the `[`; hand-written rdx code does the same in 134 of 156 cases. Compared with the
   previous build, only stored-lambda statements change (110 of 381 files containing such lambdas,
   none of 300 other files).
+- `KeepBinaryOperatorLineBreaks: true`, on all 6,633 files of the rdx modules and libraries: of
+  2,716 expressions the authors wrote over several lines with breaks at binary operators, 2,152
+  keep all their breaks (1,650 with `false`), 405 are joined because they fit on one line. 314
+  files change; no new lines over the column limit. Formatting the `false` output again with
+  `true` changes no file.
 - No crashes, no non-whitespace changes, and no new files that need a second formatting pass.
 
 ## Known limitations

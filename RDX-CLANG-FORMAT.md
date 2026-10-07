@@ -58,7 +58,7 @@ const ResultTable result_table =
 ```
 
 Why a new option: upstream clang-format cannot express this rule.
-`BreakBeforeBinaryOperators: NonAssignment` only decides on which side of the `=` a break goes,
+`BreakBeforeBinaryOperators` only decides on which side of the `=` a break goes,
 and `PenaltyBreakAssignment` only makes a break after `=` cheaper or more expensive. clang-format
 optimizes the layout of the whole statement and often prefers breaking inside the right-hand-side
 call instead of after the `=`. `IfOverLimit` therefore makes the break mandatory instead of tuning
@@ -284,9 +284,11 @@ LambdaHeaderOnStatementLine: IfFitsAlways
 PointerAlignment:
   Default: Right
   ReturnType: Left
+  WithoutName: Left
 ReferenceAlignment:
   Default: Pointer
   ReturnType: Left
+  WithoutName: Left
 ```
 
 The examples in this document also depend on these upstream options of the rdx configuration.
@@ -300,7 +302,7 @@ AlignAfterOpenBracket: AlwaysBreak
 BinPackArguments: true
 BinPackParameters: BinPack
 PackConstructorInitializers: Never
-BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeBinaryOperators: None
 AllowShortLambdasOnASingleLine: Inline
 ```
 

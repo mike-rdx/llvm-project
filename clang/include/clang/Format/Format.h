@@ -3909,8 +3909,8 @@ struct FormatStyle {
     /// The alignment for pointers in function return types.
     ReturnTypeAlignmentStyle ReturnType;
     /// The alignment for pointers that no name follows, such as in casts,
-    /// template arguments and unnamed parameters. ``ReturnType`` takes
-    /// precedence.
+    /// template arguments, type aliases and unnamed parameters. ``ReturnType``
+    /// takes precedence.
     /// \code
     ///   WithoutName: Left
     ///   auto *p = static_cast<Derived*>(base);
@@ -4121,8 +4121,9 @@ struct FormatStyle {
     /// The alignment for references in function return types.
     ReturnTypeAlignmentStyle ReturnType;
     /// The alignment for references that no name follows, such as in casts,
-    /// template arguments, unnamed parameters and ``catch`` clauses.
-    /// ``ReturnType`` takes precedence.
+    /// template arguments, type aliases, unnamed parameters and ``catch``
+    /// clauses. A ref-qualifier such as in ``void f() const &;`` is not
+    /// affected. ``ReturnType`` takes precedence.
     /// \code
     ///   WithoutName: Left
     ///   catch (const std::exception&)

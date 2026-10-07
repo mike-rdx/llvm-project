@@ -2515,6 +2515,13 @@ TEST_F(FormatTest, WithoutNameAlignment) {
   verifyFormat("size_t size = sizeof(Item*) * n;", Style);
   verifyFormat("void f(int*, const Item&, int** = nullptr);", Style);
   verifyFormat("void f(Args&&...);", Style);
+  verifyFormat("using Ptr = int*;", Style);
+  verifyFormat("using Ref = int&;", Style);
+  verifyFormat("using Type = decltype(value)&;", Style);
+  verifyFormat("using PtrArray = int*[];", Style);
+  verifyFormat("void f(int*[]);", Style);
+  verifyFormat("auto *items = new Item*[n];", Style);
+  verifyFormat("template <typename T = int*> class Holder;", Style);
   verifyFormat("void g() {\n"
                "  try {\n"
                "  } catch (const std::exception&) {\n"
@@ -2527,8 +2534,10 @@ TEST_F(FormatTest, WithoutNameAlignment) {
   verifyFormat("void f(int *a, const Item &item, Args &&...args);", Style);
   verifyFormat("int *const p = nullptr;", Style);
   verifyFormat("const auto &[first, second] = pair;", Style);
+  verifyFormat("int *[[maybe_unused]] p = nullptr;", Style);
   verifyFormat("Foo &operator=(const Foo&) & = delete;", Style);
   verifyFormat("void f() const &;", Style);
+  verifyFormat("void f() &&;", Style);
   verifyFormat("int product = a * b;", Style);
 
   // ReturnType takes precedence.

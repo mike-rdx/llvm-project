@@ -6575,17 +6575,45 @@ static bool isReturnType(const FormatToken &Tok, const LangOptions &LangOpts) {
   return false;
 }
 
+// Whether Tok is the ref-qualifier of a member function, as in
+// "void f() const &;".
+static bool isRefQualifier(const FormatToken &Tok) {
+  if (!Tok.isOneOf(tok::amp, tok::ampamp))
+    return false;
+  const FormatToken *Prev = Tok.getPreviousNonComment();
+  while (Prev && Prev->isOneOf(tok::kw_const, tok::kw_volatile))
+    Prev = Prev->getPreviousNonComment();
+  if (!Prev || Prev->isNot(tok::r_paren))
+    return false;
+  // "decltype(x) &" is a type, not a ref-qualifier.
+  const FormatToken *Opener = Prev->MatchingParen;
+  const FormatToken *BeforeOpener =
+      Opener ? Opener->getPreviousNonComment() : nullptr;
+  return !BeforeOpener || BeforeOpener->isNot(tok::kw_decltype);
+}
+
 // Whether no name follows the pointer or reference Tok, as in a cast, a
-// template argument, an unnamed parameter or a catch clause.
+// template argument, a type alias, an unnamed parameter or a catch clause.
 static bool isFollowedByNoName(const FormatToken &Tok) {
+  if (isRefQualifier(Tok))
+    return false;
   const FormatToken *Next = Tok.getNextNonComment();
   while (Next && (Next->isPointerOrReference() ||
                   Next->canBePointerOrReferenceQualifier() ||
                   Next->is(tok::ellipsis))) {
     Next = Next->getNextNonComment();
   }
-  return Next &&
-         Next->isOneOf(TT_TemplateCloser, tok::r_paren, tok::comma, tok::equal);
+  if (!Next)
+    return false;
+  // An array of pointers, as in "void f(int *[]);", but not a structured
+  // binding or an attribute.
+  if (Next->is(tok::l_square)) {
+    return Next->isNot(TT_StructuredBindingLSquare) &&
+           Next->isNot(TT_AttributeSquare) &&
+           !Next->startsSequence(tok::l_square, tok::l_square);
+  }
+  return Next->isOneOf(TT_TemplateCloser, tok::r_paren, tok::comma, tok::equal,
+                       tok::semi);
 }
 
 static FormatStyle::PointerAlignmentStyle

@@ -308,8 +308,9 @@ static unsigned getJoinedLength(const FormatToken &First,
 // last argument of a call that ends the statement (for IfFitsOnAssignment, a
 // statement with a top-level assignment); declarations such as function
 // parameter lists, type aliases and static_assert do not qualify. Nothing
-// before the lambda body may force or contain a line break, the header (from
-// the start of the statement through the lambda's parameters) must fit on one
+// before the lambda body may force or contain a line break or a comment, except
+// a "//" comment that ends the header's line. The header (from the start of the
+// statement through the lambda's parameters and that comment) must fit on one
 // line, and the whole statement must not. If the lambda can instead be merged
 // into one line that fits on a continuation line, sets *KeptArgumentStart to
 // the first token of the argument holding it.
@@ -366,10 +367,19 @@ findLambdaWithHeaderOnLine(const AnnotatedLine &Line, unsigned FirstIndent,
   if (!BeforeIntroducer || !BeforeIntroducer->isOneOf(tok::l_paren, tok::comma))
     return nullptr;
 
+  // A "//" comment after the header, on the header's line. Nothing can follow
+  // it on that line, so the statement and the lambda never fit on one line.
+  const FormatToken *TrailingComment = LBrace->Previous;
+  if (TrailingComment->isNot(TT_LineComment) ||
+      TrailingComment->MustBreakBefore) {
+    TrailingComment = nullptr;
+  }
+
   bool HasAssignment = false;
   for (const FormatToken *T = Line.First; T != LBrace; T = T->Next) {
-    if ((T != Line.First && T->MustBreakBefore) || T->is(tok::comment) ||
-        !T->Children.empty() || T->IsMultiline) {
+    if ((T != Line.First && T->MustBreakBefore) ||
+        (T->is(tok::comment) && T != TrailingComment) || !T->Children.empty() ||
+        T->IsMultiline) {
       return nullptr;
     }
     if (T->AssignmentExpressionEnd)
@@ -385,7 +395,8 @@ findLambdaWithHeaderOnLine(const AnnotatedLine &Line, unsigned FirstIndent,
     return Length != UINT_MAX && Indent + Length <= Style.ColumnLimit;
   };
   if (!Fits(FirstIndent, getJoinedLength(*Line.First, *LBrace->Previous)) ||
-      Fits(FirstIndent, getJoinedLength(*Line.First, *Last))) {
+      (!TrailingComment &&
+       Fits(FirstIndent, getJoinedLength(*Line.First, *Last)))) {
     return nullptr;
   }
 
@@ -404,8 +415,9 @@ findLambdaWithHeaderOnLine(const AnnotatedLine &Line, unsigned FirstIndent,
   const bool CanMergeBody =
       Style.AllowShortLambdasOnASingleLine == FormatStyle::SLS_Inline ||
       Style.AllowShortLambdasOnASingleLine == FormatStyle::SLS_All;
-  if (CanMergeBody && Fits(FirstIndent + Style.ContinuationIndentWidth,
-                           getJoinedLength(*ArgumentStart, *Last))) {
+  if (CanMergeBody && !TrailingComment &&
+      Fits(FirstIndent + Style.ContinuationIndentWidth,
+           getJoinedLength(*ArgumentStart, *Last))) {
     *KeptArgumentStart = ArgumentStart;
   }
   return LBrace;

@@ -8295,6 +8295,117 @@ TEST_F(FormatTest, LambdaHeaderOnStatementLineSkipsNonFittingHeaders) {
                Style);
 }
 
+TEST_F(FormatTest, LambdaHeaderOnStatementLineKeepsTrailingComment) {
+  FormatStyle Style = getLLVMStyleWithColumns(60);
+  Style.BreakBeforeBraces = FormatStyle::BS_Custom;
+  Style.BraceWrapping.BeforeLambdaBody = true;
+  Style.AllowShortLambdasOnASingleLine = FormatStyle::SLS_Inline;
+  Style.LambdaHeaderOnStatementLine = FormatStyle::LHSL_IfFitsAlways;
+
+  // A "//" comment after the header stays on the statement line.
+  verifyFormat("void f() {\n"
+               "  call([this]() // no one catches exceptions here\n"
+               "  {\n"
+               "    a();\n"
+               "    b();\n"
+               "  });\n"
+               "}",
+               Style);
+  verifyFormat("void f() {\n"
+               "  call([this]() -> bool // reason\n"
+               "  {\n"
+               "    a();\n"
+               "    return b();\n"
+               "  });\n"
+               "}",
+               Style);
+  verifyFormat("void f() {\n"
+               "  g([] // reason\n"
+               "  {\n"
+               "    a();\n"
+               "    b();\n"
+               "  });\n"
+               "}",
+               Style);
+
+  // Nothing can follow the comment on its line, so a short lambda is not kept
+  // on one line.
+  verifyFormat("void f() {\n"
+               "  call([this]() // reason\n"
+               "  {\n"
+               "    a();\n"
+               "  });\n"
+               "}",
+               "void f() {\n"
+               "  call([this]() // reason\n"
+               "       { a(); });\n"
+               "}",
+               Style);
+
+  // The comment counts toward the column limit: here the header line would be
+  // 61 columns wide.
+  verifyFormat("void f() {\n"
+               "  call(\n"
+               "      [this]() // no one is going to catch exceptions here!!\n"
+               "      {\n"
+               "        a();\n"
+               "        b();\n"
+               "      });\n"
+               "}",
+               Style);
+
+  // Other comments keep the regular layout: a comment on a line of its own, a
+  // block comment, and a comment inside the header.
+  verifyFormat("void f() {\n"
+               "  call(\n"
+               "      [this]()\n"
+               "      // reason\n"
+               "      {\n"
+               "        a();\n"
+               "        b();\n"
+               "      });\n"
+               "}",
+               Style);
+  verifyFormat("void f() {\n"
+               "  call(\n"
+               "      [this]() /* reason */\n"
+               "      {\n"
+               "        a();\n"
+               "        b();\n"
+               "      });\n"
+               "}",
+               Style);
+  verifyFormat("void f() {\n"
+               "  call(\n"
+               "      [this, // reason\n"
+               "       x]()\n"
+               "      {\n"
+               "        a();\n"
+               "        b();\n"
+               "      });\n"
+               "}",
+               Style);
+
+  Style.LambdaHeaderOnStatementLine = FormatStyle::LHSL_IfFitsOnAssignment;
+  verifyFormat("void f() {\n"
+               "  ok = call([this]() // reason\n"
+               "  {\n"
+               "    a();\n"
+               "    b();\n"
+               "  });\n"
+               "}",
+               Style);
+  verifyFormat("void f() {\n"
+               "  call(\n"
+               "      [this]() // reason\n"
+               "      {\n"
+               "        a();\n"
+               "        b();\n"
+               "      });\n"
+               "}",
+               Style);
+}
+
 TEST_F(FormatTest, LambdaHeaderOnStatementLineSkipsNonStatements) {
   FormatStyle Style = getLLVMStyleWithColumns(80);
   Style.BreakBeforeBraces = FormatStyle::BS_Custom;

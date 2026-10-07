@@ -28,6 +28,7 @@ Commits on `backport-pr-169160` on top of `llvmorg-21.1.8`:
 | `ccf6c2ff` | `[clang-format] Measure only the header of a stored lambda in BreakAfterAssignment` |
 | `28e3a734` | `[clang-format] Find stored lambda headers ending in noexcept and a trailing return type` |
 | `0923ff11` | `[clang-format] Align a stored lambda's body with its header's line` |
+| `845e286c` | `[clang-format] Allow a trailing comment after the header in LambdaHeaderOnStatementLine` |
 
 ## New options
 
@@ -148,9 +149,20 @@ A line keeps the regular formatting if any of these is true:
 - the statement is a declaration: a function parameter list (e.g. a default argument), `using`,
   `typedef`, `static_assert` or `template`; or it starts with `if`, `for`, `while` or `switch`;
 - the line is in a macro definition;
-- the header contains a comment, another block, a multi-line token (e.g. a raw string) or a forced
-  line break;
+- the header contains a comment (other than a `//` comment that ends the header's line, see below),
+  another block, a multi-line token (e.g. a raw string) or a forced line break;
 - the header does not fit in the column limit.
+
+A `//` comment that ends the header's line stays on that line and counts toward the column limit.
+Nothing can follow it there, so such a lambda is never kept on one line, and the statement gets the
+layout even if it would fit on one line without the comment:
+
+```cpp
+Util::callWithExceptionSuppression([this]() // no one catches exceptions from here
+{
+	updateView();
+});
+```
 
 Short lambdas: if `AllowShortLambdasOnASingleLine` would merge the lambda into one line and it fits
 on a continuation line, it stays on one line. Line breaks inside it are penalized, so it is neither
@@ -201,7 +213,7 @@ cmake --build build-codex --config Release --target clang-format FormatTests
 
 ## Tests
 
-All 1,223 `FormatTests` pass. The new options are covered by these tests in
+All 1,224 `FormatTests` pass. The new options are covered by these tests in
 `clang/unittests/Format/FormatTest.cpp`:
 
 | Test | Covers |
@@ -212,6 +224,7 @@ All 1,223 `FormatTests` pass. The new options are covered by these tests in
 | `LambdaHeaderOnStatementLine` | `Never` vs. `IfFitsAlways`, trailing return types, `connect()`, nested statements, short bodies, `-> double &`, parentheses around the lambda |
 | `LambdaHeaderOnStatementLineOnAssignment` | assignments get the layout, plain calls do not |
 | `LambdaHeaderOnStatementLineSkipsNonFittingHeaders` | header of exactly the column limit vs. one more, lambda not the last argument, comment in the header |
+| `LambdaHeaderOnStatementLineKeepsTrailingComment` | a `//` comment after the header: long and short bodies, `-> bool`, `[]` without parameters, the comment counted in the column limit, other comments (on a line of their own, block comment, inside the captures), `IfFitsOnAssignment` |
 | `LambdaHeaderOnStatementLineSkipsNonStatements` | default argument, type alias, `static_assert`, multi-line raw string, empty lambda |
 
 `ConfigParseTest.cpp` checks that all option values parse.

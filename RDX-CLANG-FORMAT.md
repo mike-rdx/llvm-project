@@ -2,7 +2,8 @@
 
 This fork of [llvm/llvm-project](https://github.com/llvm/llvm-project) carries a modified
 clang-format for the rdx code base. It adds two style options that the rdx coding rules need and
-that upstream clang-format does not have, plus one backported upstream change.
+that upstream clang-format does not have, plus one backported upstream change, which the fork
+extends with a `WithoutName` sub-option and lambda return types.
 
 Everything else is unchanged LLVM 21.1.8. With the new options left at their defaults, the
 modified clang-format produces exactly the same output as upstream clang-format 21.1.8.
@@ -29,6 +30,8 @@ Commits on `backport-pr-169160` on top of `llvmorg-21.1.8`:
 | `28e3a734` | `[clang-format] Find stored lambda headers ending in noexcept and a trailing return type` |
 | `0923ff11` | `[clang-format] Align a stored lambda's body with its header's line` |
 | `845e286c` | `[clang-format] Allow a trailing comment after the header in LambdaHeaderOnStatementLine` |
+| `aa87b167` | `[clang-format] Treat lambda trailing return types as return types in ReturnType alignment` |
+| `1b1329d9` | `[clang-format] Add WithoutName to PointerAlignment and ReferenceAlignment` |
 
 ## New options
 
@@ -170,7 +173,7 @@ folded into `{ ...; }` on the next line nor split inside its capture list.
 
 The option requires `BraceWrapping.BeforeLambdaBody: true`.
 
-### Backport: pointer and reference alignment in return types (PR #169160)
+### Pointer and reference alignment: return types (backport of PR #169160) and `WithoutName`
 
 `PointerAlignment` and `ReferenceAlignment` accept a struct with a `ReturnType` sub-option that
 overrides the alignment in function return types. The two overrides are independent of each
@@ -197,9 +200,43 @@ const std::vector<int>&& takeValues();
 - The override applies to leading and trailing return types, member functions, templates,
   qualifiers, multiple indirection, `&` and `&&`. Variables and parameters keep the `Default`
   alignment.
+- rdx addition: the trailing return types of lambdas count as return types too
+  (`[](int *a) -> int* { ... }`); upstream PR #169160 covers only functions.
 - `ReturnType: Default` keeps the LLVM 21 behaviour.
 - The old one-word form, e.g. `PointerAlignment: Right`, is still accepted, including the old
   boolean aliases.
+
+#### rdx addition: `WithoutName`
+
+A third sub-option, with the same values as `ReturnType`, sets the alignment of a pointer or
+reference that no name follows: in casts, template arguments, function types, `sizeof`, unnamed
+parameters (also with a default value or a commented-out name) and `catch` clauses. It applies when
+the next token after the `*`/`&` (skipping further `*`/`&`, `const`/`volatile` and `...`) is `>`,
+`)`, `,` or `=`. `ReturnType` takes precedence.
+
+```yaml
+PointerAlignment:
+  Default: Right
+  ReturnType: Left
+  WithoutName: Left
+ReferenceAlignment:
+  Default: Pointer
+  ReturnType: Left
+  WithoutName: Left
+```
+
+```cpp
+auto *p_derived = dynamic_cast<Derived*>(p_base);
+std::map<Key*, std::vector<Value*>> values;
+std::function<void(const QString&)> callback;
+char *p_text = (char*)p_data;
+void addItem(Item*, const QString &title, int* = nullptr);
+catch (const std::bad_alloc&)
+```
+
+Named declarations, structured bindings (`const auto &[a, b]`), ref-qualifiers
+(`Foo &operator=(const Foo&) & = delete;`) and expressions (`a * b`, `&value`) are not affected.
+`WithoutName: Default` keeps the `Default` alignment.
 
 ## Building (Windows, Visual Studio 2022)
 
@@ -213,7 +250,7 @@ cmake --build build-codex --config Release --target clang-format FormatTests
 
 ## Tests
 
-All 1,224 `FormatTests` pass. The new options are covered by these tests in
+All 1,225 `FormatTests` pass. The new options are covered by these tests in
 `clang/unittests/Format/FormatTest.cpp`:
 
 | Test | Covers |
@@ -226,6 +263,8 @@ All 1,224 `FormatTests` pass. The new options are covered by these tests in
 | `LambdaHeaderOnStatementLineSkipsNonFittingHeaders` | header of exactly the column limit vs. one more, lambda not the last argument, comment in the header |
 | `LambdaHeaderOnStatementLineKeepsTrailingComment` | a `//` comment after the header: long and short bodies, `-> bool`, `[]` without parameters, the comment counted in the column limit, other comments (on a line of their own, block comment, inside the captures), `IfFitsOnAssignment` |
 | `LambdaHeaderOnStatementLineSkipsNonStatements` | default argument, type alias, `static_assert`, multi-line raw string, empty lambda |
+| `ReturnTypeAlignment` | the backported `ReturnType` tests, plus lambda trailing return types |
+| `WithoutNameAlignment` | casts, template arguments, function types, `sizeof`, unnamed parameters, `catch`; named declarations, structured bindings, ref-qualifiers and expressions unchanged; `ReturnType` precedence |
 
 `ConfigParseTest.cpp` checks that all option values parse.
 

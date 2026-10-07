@@ -32,6 +32,7 @@ Commits on `backport-pr-169160` on top of `llvmorg-21.1.8`:
 | `845e286c` | `[clang-format] Allow a trailing comment after the header in LambdaHeaderOnStatementLine` |
 | `aa87b167` | `[clang-format] Treat lambda trailing return types as return types in ReturnType alignment` |
 | `1b1329d9` | `[clang-format] Add WithoutName to PointerAlignment and ReferenceAlignment` |
+| `c4d31089` | `[clang-format] Treat type aliases and arrays of pointers as WithoutName, but not ref-qualifiers` |
 
 ## New options
 
@@ -209,10 +210,12 @@ const std::vector<int>&& takeValues();
 #### rdx addition: `WithoutName`
 
 A third sub-option, with the same values as `ReturnType`, sets the alignment of a pointer or
-reference that no name follows: in casts, template arguments, function types, `sizeof`, unnamed
-parameters (also with a default value or a commented-out name) and `catch` clauses. It applies when
-the next token after the `*`/`&` (skipping further `*`/`&`, `const`/`volatile` and `...`) is `>`,
-`)`, `,` or `=`. `ReturnType` takes precedence.
+reference that no name follows: in casts, template arguments, function types, `sizeof`, type
+aliases, arrays of pointers (`new T*[n]`, `void f(int*[])`), unnamed parameters (also with a default
+value or a commented-out name) and `catch` clauses. It applies when the next token after the
+`*`/`&` (skipping further `*`/`&`, `const`/`volatile` and `...`) is `>`, `)`, `,`, `=`, `;` or
+`[`, except for a structured binding (`auto &[a, b]`), an attribute (`int *[[maybe_unused]] p`)
+and a member function's ref-qualifier (`void f() const &;`). `ReturnType` takes precedence.
 
 ```yaml
 PointerAlignment:
@@ -264,7 +267,7 @@ All 1,225 `FormatTests` pass. The new options are covered by these tests in
 | `LambdaHeaderOnStatementLineKeepsTrailingComment` | a `//` comment after the header: long and short bodies, `-> bool`, `[]` without parameters, the comment counted in the column limit, other comments (on a line of their own, block comment, inside the captures), `IfFitsOnAssignment` |
 | `LambdaHeaderOnStatementLineSkipsNonStatements` | default argument, type alias, `static_assert`, multi-line raw string, empty lambda |
 | `ReturnTypeAlignment` | the backported `ReturnType` tests, plus lambda trailing return types |
-| `WithoutNameAlignment` | casts, template arguments, function types, `sizeof`, unnamed parameters, `catch`; named declarations, structured bindings, ref-qualifiers and expressions unchanged; `ReturnType` precedence |
+| `WithoutNameAlignment` | casts, template arguments, function types, `sizeof`, type aliases, arrays of pointers, unnamed parameters, `catch`; named declarations, structured bindings, attributes, ref-qualifiers and expressions unchanged; `ReturnType` precedence |
 
 `ConfigParseTest.cpp` checks that all option values parse.
 

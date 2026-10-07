@@ -541,30 +541,36 @@ template <> struct MappingTraits<FormatStyle::PointerAlignmentOptions> {
     IO.enumCase(Value, "Middle",
                 FormatStyle::PointerAlignmentOptions(
                     {/*Default=*/FormatStyle::PAS_Middle,
-                     /*ReturnType=*/FormatStyle::RTAS_Default}));
+                     /*ReturnType=*/FormatStyle::RTAS_Default,
+                     /*WithoutName=*/FormatStyle::RTAS_Default}));
     IO.enumCase(Value, "Left",
                 FormatStyle::PointerAlignmentOptions(
                     {/*Default=*/FormatStyle::PAS_Left,
-                     /*ReturnType=*/FormatStyle::RTAS_Default}));
+                     /*ReturnType=*/FormatStyle::RTAS_Default,
+                     /*WithoutName=*/FormatStyle::RTAS_Default}));
     IO.enumCase(Value, "Right",
                 FormatStyle::PointerAlignmentOptions(
                     {/*Default=*/FormatStyle::PAS_Right,
-                     /*ReturnType=*/FormatStyle::RTAS_Default}));
+                     /*ReturnType=*/FormatStyle::RTAS_Default,
+                     /*WithoutName=*/FormatStyle::RTAS_Default}));
 
     // For backward compatibility.
     IO.enumCase(Value, "true",
                 FormatStyle::PointerAlignmentOptions(
                     {/*Default=*/FormatStyle::PAS_Left,
-                     /*ReturnType=*/FormatStyle::RTAS_Default}));
+                     /*ReturnType=*/FormatStyle::RTAS_Default,
+                     /*WithoutName=*/FormatStyle::RTAS_Default}));
     IO.enumCase(Value, "false",
                 FormatStyle::PointerAlignmentOptions(
                     {/*Default=*/FormatStyle::PAS_Right,
-                     /*ReturnType=*/FormatStyle::RTAS_Default}));
+                     /*ReturnType=*/FormatStyle::RTAS_Default,
+                     /*WithoutName=*/FormatStyle::RTAS_Default}));
   }
 
   static void mapping(IO &IO, FormatStyle::PointerAlignmentOptions &Value) {
     IO.mapOptional("Default", Value.Default);
     IO.mapOptional("ReturnType", Value.ReturnType);
+    IO.mapOptional("WithoutName", Value.WithoutName);
   }
 };
 
@@ -613,24 +619,29 @@ template <> struct MappingTraits<FormatStyle::ReferenceAlignmentOptions> {
     IO.enumCase(Value, "Pointer",
                 FormatStyle::ReferenceAlignmentOptions(
                     {/*Default=*/FormatStyle::RAS_Pointer,
-                     /*ReturnType=*/FormatStyle::RTAS_Default}));
+                     /*ReturnType=*/FormatStyle::RTAS_Default,
+                     /*WithoutName=*/FormatStyle::RTAS_Default}));
     IO.enumCase(Value, "Middle",
                 FormatStyle::ReferenceAlignmentOptions(
                     {/*Default=*/FormatStyle::RAS_Middle,
-                     /*ReturnType=*/FormatStyle::RTAS_Default}));
+                     /*ReturnType=*/FormatStyle::RTAS_Default,
+                     /*WithoutName=*/FormatStyle::RTAS_Default}));
     IO.enumCase(Value, "Left",
                 FormatStyle::ReferenceAlignmentOptions(
                     {/*Default=*/FormatStyle::RAS_Left,
-                     /*ReturnType=*/FormatStyle::RTAS_Default}));
+                     /*ReturnType=*/FormatStyle::RTAS_Default,
+                     /*WithoutName=*/FormatStyle::RTAS_Default}));
     IO.enumCase(Value, "Right",
                 FormatStyle::ReferenceAlignmentOptions(
                     {/*Default=*/FormatStyle::RAS_Right,
-                     /*ReturnType=*/FormatStyle::RTAS_Default}));
+                     /*ReturnType=*/FormatStyle::RTAS_Default,
+                     /*WithoutName=*/FormatStyle::RTAS_Default}));
   }
 
   static void mapping(IO &IO, FormatStyle::ReferenceAlignmentOptions &Value) {
     IO.mapOptional("Default", Value.Default);
     IO.mapOptional("ReturnType", Value.ReturnType);
+    IO.mapOptional("WithoutName", Value.WithoutName);
   }
 };
 
@@ -1728,11 +1739,13 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
   LLVMStyle.ObjCSpaceBeforeProtocolList = true;
   LLVMStyle.PackConstructorInitializers = FormatStyle::PCIS_BinPack;
   LLVMStyle.PointerAlignment = {/*Default=*/FormatStyle::PAS_Right,
-                                /*ReturnType=*/FormatStyle::RTAS_Default};
+                                /*ReturnType=*/FormatStyle::RTAS_Default,
+                                /*WithoutName=*/FormatStyle::RTAS_Default};
   LLVMStyle.PPIndentWidth = -1;
   LLVMStyle.QualifierAlignment = FormatStyle::QAS_Leave;
   LLVMStyle.ReferenceAlignment = {/*Default=*/FormatStyle::RAS_Pointer,
-                                  /*ReturnType=*/FormatStyle::RTAS_Default};
+                                  /*ReturnType=*/FormatStyle::RTAS_Default,
+                                  /*WithoutName=*/FormatStyle::RTAS_Default};
   LLVMStyle.ReflowComments = FormatStyle::RCS_Always;
   LLVMStyle.RemoveBracesLLVM = false;
   LLVMStyle.RemoveEmptyLinesInUnwrappedLines = false;

@@ -2501,6 +2501,44 @@ TEST_F(FormatTest, ReturnTypeAlignment) {
   verifyFormat("auto f3(int &&a, int *b) -> int &&;", Style);
 }
 
+TEST_F(FormatTest, WithoutNameAlignment) {
+  FormatStyle Style = getLLVMStyle();
+  Style.PointerAlignment.WithoutName = FormatStyle::RTAS_Left;
+  Style.ReferenceAlignment.WithoutName = FormatStyle::RTAS_Left;
+
+  // Casts, template arguments, function types, sizeof, unnamed parameters and
+  // catch clauses.
+  verifyFormat("auto *p = static_cast<Derived*>(base);", Style);
+  verifyFormat("char *text = (char*)data;", Style);
+  verifyFormat("std::map<Key*, std::vector<Value*>> map;", Style);
+  verifyFormat("std::function<void(int&)> callback;", Style);
+  verifyFormat("size_t size = sizeof(Item*) * n;", Style);
+  verifyFormat("void f(int*, const Item&, int** = nullptr);", Style);
+  verifyFormat("void f(Args&&...);", Style);
+  verifyFormat("void g() {\n"
+               "  try {\n"
+               "  } catch (const std::exception&) {\n"
+               "  }\n"
+               "}",
+               Style);
+
+  // Named declarations, structured bindings, ref-qualifiers and expressions
+  // keep the default alignment.
+  verifyFormat("void f(int *a, const Item &item, Args &&...args);", Style);
+  verifyFormat("int *const p = nullptr;", Style);
+  verifyFormat("const auto &[first, second] = pair;", Style);
+  verifyFormat("Foo &operator=(const Foo&) & = delete;", Style);
+  verifyFormat("void f() const &;", Style);
+  verifyFormat("int product = a * b;", Style);
+
+  // ReturnType takes precedence.
+  Style.PointerAlignment = {/*Default=*/FormatStyle::PAS_Left,
+                            /*ReturnType=*/FormatStyle::RTAS_Right,
+                            /*WithoutName=*/FormatStyle::RTAS_Right};
+  verifyFormat("auto f(int *) -> int *;", Style);
+  verifyFormat("int* p = static_cast<int *>(q);", Style);
+}
+
 TEST_F(FormatTest, FormatsForLoop) {
   verifyFormat(
       "for (int VeryVeryLongLoopVariable = 0; VeryVeryLongLoopVariable < 10;\n"

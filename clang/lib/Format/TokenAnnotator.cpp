@@ -6575,6 +6575,19 @@ static bool isReturnType(const FormatToken &Tok, const LangOptions &LangOpts) {
   return false;
 }
 
+// Whether no name follows the pointer or reference Tok, as in a cast, a
+// template argument, an unnamed parameter or a catch clause.
+static bool isFollowedByNoName(const FormatToken &Tok) {
+  const FormatToken *Next = Tok.getNextNonComment();
+  while (Next && (Next->isPointerOrReference() ||
+                  Next->canBePointerOrReferenceQualifier() ||
+                  Next->is(tok::ellipsis))) {
+    Next = Next->getNextNonComment();
+  }
+  return Next &&
+         Next->isOneOf(TT_TemplateCloser, tok::r_paren, tok::comma, tok::equal);
+}
+
 static FormatStyle::PointerAlignmentStyle
 mapReturnTypeAlignmentStyle(FormatStyle::ReturnTypeAlignmentStyle Style) {
   switch (Style) {
@@ -6597,6 +6610,10 @@ TokenAnnotator::getTokenReferenceAlignment(const FormatToken &Reference) const {
   if (Style.ReferenceAlignment.ReturnType != FormatStyle::RTAS_Default &&
       isReturnType(Reference, LangOpts)) {
     return mapReturnTypeAlignmentStyle(Style.ReferenceAlignment.ReturnType);
+  }
+  if (Style.ReferenceAlignment.WithoutName != FormatStyle::RTAS_Default &&
+      isFollowedByNoName(Reference)) {
+    return mapReturnTypeAlignmentStyle(Style.ReferenceAlignment.WithoutName);
   }
 
   switch (Style.ReferenceAlignment.Default) {
@@ -6622,6 +6639,10 @@ TokenAnnotator::getTokenPointerOrReferenceAlignment(
   if (Style.PointerAlignment.ReturnType != FormatStyle::RTAS_Default &&
       isReturnType(PointerOrReference, LangOpts)) {
     return mapReturnTypeAlignmentStyle(Style.PointerAlignment.ReturnType);
+  }
+  if (Style.PointerAlignment.WithoutName != FormatStyle::RTAS_Default &&
+      isFollowedByNoName(PointerOrReference)) {
+    return mapReturnTypeAlignmentStyle(Style.PointerAlignment.WithoutName);
   }
 
   return Style.PointerAlignment.Default;

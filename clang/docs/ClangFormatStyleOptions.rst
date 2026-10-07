@@ -5535,6 +5535,45 @@ the configuration (without a prefix: ``Auto``).
         int * a(void);
 
 
+  * ``ReturnTypeAlignmentStyle WithoutName``
+    The alignment for pointers that no name follows, such as in casts,
+    template arguments and unnamed parameters. ``ReturnType`` takes
+    precedence.
+
+    .. code-block:: c++
+
+      WithoutName: Left
+      auto *p = static_cast<Derived*>(base);
+      std::vector<Item*> items;
+      void f(int*, int *name);
+
+    Possible values:
+
+    * ``RTAS_Default`` (in configuration: ``Default``)
+      Use default alignment.
+
+    * ``RTAS_Left`` (in configuration: ``Left``)
+      Align pointer/reference to the left.
+
+      .. code-block:: c++
+
+        int* a(void);
+
+    * ``RTAS_Right`` (in configuration: ``Right``)
+      Align pointer/reference to the right.
+
+      .. code-block:: c++
+
+        int *a(void);
+
+    * ``RTAS_Middle`` (in configuration: ``Middle``)
+      Align pointer/reference in the middle.
+
+      .. code-block:: c++
+
+        int * a(void);
+
+
 
 .. _QualifierAlignment:
 
@@ -5720,6 +5759,44 @@ the configuration (without a prefix: ``Auto``).
 
   * ``ReturnTypeAlignmentStyle ReturnType``
     The alignment for references in function return types.
+
+    Possible values:
+
+    * ``RTAS_Default`` (in configuration: ``Default``)
+      Use default alignment.
+
+    * ``RTAS_Left`` (in configuration: ``Left``)
+      Align pointer/reference to the left.
+
+      .. code-block:: c++
+
+        int* a(void);
+
+    * ``RTAS_Right`` (in configuration: ``Right``)
+      Align pointer/reference to the right.
+
+      .. code-block:: c++
+
+        int *a(void);
+
+    * ``RTAS_Middle`` (in configuration: ``Middle``)
+      Align pointer/reference in the middle.
+
+      .. code-block:: c++
+
+        int * a(void);
+
+
+  * ``ReturnTypeAlignmentStyle WithoutName``
+    The alignment for references that no name follows, such as in casts,
+    template arguments, unnamed parameters and ``catch`` clauses.
+    ``ReturnType`` takes precedence.
+
+    .. code-block:: c++
+
+      WithoutName: Left
+      catch (const std::exception&)
+      void f(const std::string&, const std::string &name);
 
     Possible values:
 

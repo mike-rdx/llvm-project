@@ -3880,7 +3880,8 @@ struct FormatStyle {
     PAS_Middle
   };
 
-  /// \brief The pointer/reference alignment style for function return types.
+  /// \brief The pointer/reference alignment style for function return types
+  /// and for pointers/references that no name follows.
   enum ReturnTypeAlignmentStyle : int8_t {
     /// Use default alignment.
     RTAS_Default,
@@ -3907,8 +3908,19 @@ struct FormatStyle {
     PointerAlignmentStyle Default;
     /// The alignment for pointers in function return types.
     ReturnTypeAlignmentStyle ReturnType;
+    /// The alignment for pointers that no name follows, such as in casts,
+    /// template arguments and unnamed parameters. ``ReturnType`` takes
+    /// precedence.
+    /// \code
+    ///   WithoutName: Left
+    ///   auto *p = static_cast<Derived*>(base);
+    ///   std::vector<Item*> items;
+    ///   void f(int*, int *name);
+    /// \endcode
+    ReturnTypeAlignmentStyle WithoutName;
     bool operator==(const PointerAlignmentOptions &R) const {
-      return Default == R.Default && ReturnType == R.ReturnType;
+      return Default == R.Default && ReturnType == R.ReturnType &&
+             WithoutName == R.WithoutName;
     }
     bool operator!=(const PointerAlignmentOptions &R) const {
       return !(*this == R);
@@ -4108,8 +4120,18 @@ struct FormatStyle {
     ReferenceAlignmentStyle Default;
     /// The alignment for references in function return types.
     ReturnTypeAlignmentStyle ReturnType;
+    /// The alignment for references that no name follows, such as in casts,
+    /// template arguments, unnamed parameters and ``catch`` clauses.
+    /// ``ReturnType`` takes precedence.
+    /// \code
+    ///   WithoutName: Left
+    ///   catch (const std::exception&)
+    ///   void f(const std::string&, const std::string &name);
+    /// \endcode
+    ReturnTypeAlignmentStyle WithoutName;
     bool operator==(const ReferenceAlignmentOptions &R) const {
-      return Default == R.Default && ReturnType == R.ReturnType;
+      return Default == R.Default && ReturnType == R.ReturnType &&
+             WithoutName == R.WithoutName;
     }
     bool operator!=(const ReferenceAlignmentOptions &R) const {
       return !(*this == R);

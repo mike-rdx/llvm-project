@@ -29979,6 +29979,125 @@ TEST_F(FormatTest, BreakBinaryOperations) {
                Style);
 }
 
+// The option depends on the input's line breaks, so every case gives the input
+// explicitly (verifyFormat with one argument also tries the input without
+// line breaks).
+TEST_F(FormatTest, KeepBinaryOperatorLineBreaks) {
+  FormatStyle Style = getLLVMStyleWithColumns(40);
+  EXPECT_FALSE(Style.KeepBinaryOperatorLineBreaks);
+
+  const StringRef Chain = "text = aaaa % bbbb % cccc %\n"
+                          "       dddd % eeee % ffff %\n"
+                          "       gggg;";
+  verifyFormat("text = aaaa % bbbb % cccc % dddd %\n"
+               "       eeee % ffff % gggg;",
+               Chain, Style);
+
+  Style.KeepBinaryOperatorLineBreaks = true;
+  verifyFormat(Chain, Chain, Style);
+
+  // A break before the operator moves after it (BreakBeforeBinaryOperators:
+  // None).
+  verifyFormat(Chain,
+               "text = aaaa % bbbb % cccc\n"
+               "       % dddd % eeee % ffff\n"
+               "       % gggg;",
+               Style);
+
+  // The expression fits on one line: joined.
+  verifyFormat("bool b = aaaa && bbbb;",
+               "bool b = aaaa &&\n"
+               "         bbbb;",
+               Style);
+
+  // A line of the input that is too long gets further breaks.
+  verifyFormat("text = aaaa % bbbbbbbbbbb %\n"
+               "       ccccccccccc % ddddd %\n"
+               "       eeee;",
+               "text = aaaa % bbbbbbbbbbb % ccccccccccc % ddddd %\n"
+               "       eeee;",
+               Style);
+
+  // Conditions, and an operand of a call argument.
+  verifyFormat("if (aaaaaaaaaa &&\n"
+               "    bbbbbbbbbb && cccccccccc && dddd)\n"
+               "  f();",
+               "if (aaaaaaaaaa &&\n"
+               "    bbbbbbbbbb && cccccccccc && dddd)\n"
+               "  f();",
+               Style);
+  verifyFormat("f(aaaa, bbbb,\n"
+               "  tr(\"x\").arg(cccc) +\n"
+               "      dddddddddddd);",
+               "f(aaaa, bbbb, tr(\"x\").arg(cccc) +\n"
+               "                  dddddddddddd);",
+               Style);
+
+  // Line breaks at assignments, commas and "?:" are not kept.
+  verifyFormat("xx = aaaa + bbbb + cccc + dddd + eeee +\n"
+               "     ffff;",
+               "xx =\n"
+               "    aaaa + bbbb + cccc + dddd + eeee + ffff;",
+               Style);
+  verifyFormat("f(aaaa, bbbb, cccc, dddd, eeee, ffff,\n"
+               "  gggg);",
+               "f(aaaa,\n"
+               "  bbbb, cccc, dddd, eeee, ffff, gggg);",
+               Style);
+  verifyFormat("b = aaaa ? bbbbbbbbbbbbbbbb\n"
+               "         : cccccccccccccccccccccc;",
+               "b = aaaa ? bbbbbbbbbbbbbbbb :\n"
+               "    cccccccccccccccccccccc;",
+               Style);
+
+  // A break the line has before the operator anyway (an empty line, a comment)
+  // is not moved after it as well.
+  verifyFormat("sum = aaaaaaaaaa\n"
+               "\n"
+               "      + bbbbbbbbbb + cccccccccc;",
+               "sum = aaaaaaaaaa\n"
+               "\n"
+               "      + bbbbbbbbbb + cccccccccc;",
+               Style);
+  verifyFormat("sum = aaaaaaaaaa // c\n"
+               "      + bbbbbbbbbb + cccccccccc;",
+               "sum = aaaaaaaaaa // c\n"
+               "      + bbbbbbbbbb + cccccccccc;",
+               Style);
+
+  // A comment after the expression doesn't count: this expression fits, so it
+  // is formatted as with the option off. A long expression keeps its breaks.
+  // (verifyFormat also checks that the expected text stays unchanged on a
+  // second pass.)
+  FormatStyle CommentStyle = getLLVMStyleWithColumns(30);
+  CommentStyle.BreakBeforeBinaryOperators = FormatStyle::BOS_NonAssignment;
+  CommentStyle.KeepBinaryOperatorLineBreaks = true;
+  verifyFormat("x = aaaa + bbbb\n"
+               "    + cccc; // trailing\n"
+               "            // comment\n"
+               "            // explanation\n"
+               "            // here",
+               "x = aaaa +\n"
+               " bbbb + cccc; // trailing comment explanation here",
+               CommentStyle);
+  verifyFormat("x = aaaaaaaaaa\n"
+               "    + bbbbbbbbbb\n"
+               "    + cccccccccc; // trailing\n"
+               "                  // comment\n"
+               "                  // explanation\n"
+               "                  // here",
+               "x = aaaaaaaaaa +\n"
+               " bbbbbbbbbb + cccccccccc; // trailing comment explanation here",
+               CommentStyle);
+
+  // With BreakBeforeBinaryOperators, the break stays before the operator.
+  Style.BreakBeforeBinaryOperators = FormatStyle::BOS_All;
+  verifyFormat("text = aaaa % bbbb % cccc\n"
+               "       % dddd % eeee % ffff\n"
+               "       % gggg;",
+               Chain, Style);
+}
+
 TEST_F(FormatTest, RemoveEmptyLinesInUnwrappedLines) {
   auto Style = getLLVMStyle();
   Style.RemoveEmptyLinesInUnwrappedLines = true;

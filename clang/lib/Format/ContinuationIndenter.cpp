@@ -242,6 +242,72 @@ static bool isInFittingStoredLambdaCaptures(const LineState &State,
   return false;
 }
 
+// Whether Op is a binary operator whose input line breaks
+// KeepBinaryOperatorLineBreaks keeps: not an assignment, a comma or "?:".
+static bool isKeptBinaryOperator(const FormatToken &Op) {
+  return Op.is(TT_BinaryOperator) && Op.getPrecedence() >= prec::LogicalOr;
+}
+
+// Returns the width of the line from its first token through the end of the
+// expression that contains Op (the contents of the innermost brackets around
+// it and the closing bracket, or the whole statement), with no line breaks.
+// Comments after the expression don't count. A token that must start a new
+// line (e.g. after a "//" comment inside the expression) counts as a whole
+// column limit (see TotalLength), so such an expression never fits.
+static unsigned getWidthThroughEnclosingExpression(const AnnotatedLine &Line,
+                                                   const FormatToken &Op) {
+  const FormatToken *Last = &Op;
+  unsigned Depth = 0;
+  for (const FormatToken *Tok = Op.Next; Tok; Tok = Tok->Next) {
+    if (Tok->opensScope()) {
+      ++Depth;
+    } else if (Tok->closesScope()) {
+      if (Depth == 0) {
+        Last = Tok;
+        break;
+      }
+      --Depth;
+    }
+    if (Tok->isNot(tok::comment))
+      Last = Tok;
+  }
+  return Last->TotalLength - Line.First->TotalLength + Line.First->ColumnWidth;
+}
+
+// Penalty for not breaking where KeepBinaryOperatorLineBreaks keeps the
+// input's line break: high enough to beat the usual costs of a line break,
+// far below the cost of exceeding the column limit.
+static constexpr unsigned PenaltyIgnoredBinaryOperatorBreak = 1000;
+
+// Whether KeepBinaryOperatorLineBreaks keeps the input's line break at the
+// binary operator before State.NextToken (or at State.NextToken itself when
+// the style breaks before binary operators): the input had a line break on
+// either side of the operator, and the line through the end of the enclosing
+// expression doesn't fit. Not breaking there costs
+// PenaltyIgnoredBinaryOperatorBreak.
+static bool shouldKeepBinaryOperatorBreak(const LineState &State,
+                                          const FormatStyle &Style) {
+  if (!Style.KeepBinaryOperatorLineBreaks || Style.ColumnLimit == 0)
+    return false;
+  const FormatToken &Current = *State.NextToken;
+  const FormatToken *Op =
+      Style.BreakBeforeBinaryOperators == FormatStyle::BOS_None
+          ? Current.Previous
+          : &Current;
+  if (!Op || !Op->Next || !isKeptBinaryOperator(*Op))
+    return false;
+  if (Op->NewlinesBefore == 0 && Op->Next->NewlinesBefore == 0)
+    return false;
+  // A break that the line must have on the other side of the operator anyway
+  // (e.g. at an empty line of the input) already keeps the input's break.
+  const bool BreaksAfterOperator = Op != &Current;
+  if (BreaksAfterOperator ? Op->MustBreakBefore : Op->Next->MustBreakBefore)
+    return false;
+  return State.FirstIndent +
+             getWidthThroughEnclosingExpression(*State.Line, *Op) >
+         Style.ColumnLimit;
+}
+
 static bool mustBreakAfterAssignment(const LineState &State,
                                      const FormatStyle &Style,
                                      unsigned ColumnLimit) {
@@ -1014,8 +1080,10 @@ unsigned ContinuationIndenter::addTokenToState(LineState &State, bool Newline,
   }
 
   unsigned Penalty = 0;
+  if (!Newline && shouldKeepBinaryOperatorBreak(State, Style))
+    Penalty += PenaltyIgnoredBinaryOperatorBreak;
   if (Newline)
-    Penalty = addTokenOnNewLine(State, DryRun);
+    Penalty += addTokenOnNewLine(State, DryRun);
   else
     addTokenOnCurrentLine(State, DryRun, ExtraSpaces);
 

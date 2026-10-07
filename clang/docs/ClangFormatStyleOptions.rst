@@ -4750,6 +4750,27 @@ the configuration (without a prefix: ``Auto``).
      false:
      import {VeryLongImportsAreAnnoying, VeryLongImportsAreAnnoying, VeryLongImportsAreAnnoying,} from "some/module.js"
 
+.. _KeepBinaryOperatorLineBreaks:
+
+**KeepBinaryOperatorLineBreaks** (``Boolean``) :versionbadge:`clang-format 21` :ref:`¶ <KeepBinaryOperatorLineBreaks>`
+  If ``true``, line breaks that the input has next to binary operators
+  (such as ``%``, ``+``, ``&&``, ``==`` or ``<<``, but not assignments,
+  commas or ``?:``) are kept, on the side of the operator that
+  ``BreakBeforeBinaryOperators`` selects. This applies when the line, from
+  its start through the end of the expression that contains the operator
+  (up to the enclosing closing bracket, or the whole statement; comments
+  after it don't count), does not fit in the column limit; otherwise the
+  expression is formatted as usual.
+  Not breaking at such a place is penalized rather than forbidden, and
+  further breaks are still added where a line would exceed the limit.
+
+  .. code-block:: c++
+
+     true:                                   false:
+     text = a % b % separator %              text = a % b % separator % c %
+            c % d % separator %                     d % separator % e % f;
+            e % f;
+
 .. _KeepEmptyLines:
 
 **KeepEmptyLines** (``KeepEmptyLinesStyle``) :versionbadge:`clang-format 19` :ref:`¶ <KeepEmptyLines>`

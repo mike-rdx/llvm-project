@@ -1190,6 +1190,8 @@ template <> struct MappingTraits<FormatStyle> {
     IO.mapOptional("JavaImportGroups", Style.JavaImportGroups);
     IO.mapOptional("JavaScriptQuotes", Style.JavaScriptQuotes);
     IO.mapOptional("JavaScriptWrapImports", Style.JavaScriptWrapImports);
+    IO.mapOptional("KeepBinaryOperatorLineBreaks",
+                   Style.KeepBinaryOperatorLineBreaks);
     IO.mapOptional("KeepEmptyLines", Style.KeepEmptyLines);
     IO.mapOptional("KeepFormFeed", Style.KeepFormFeed);
     IO.mapOptional("LambdaBodyIndentation", Style.LambdaBodyIndentation);
@@ -1720,6 +1722,7 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
       /*Hex=*/0,     /*HexMinDigits=*/0};
   LLVMStyle.JavaScriptQuotes = FormatStyle::JSQS_Leave;
   LLVMStyle.JavaScriptWrapImports = true;
+  LLVMStyle.KeepBinaryOperatorLineBreaks = false;
   LLVMStyle.KeepEmptyLines = {
       /*AtEndOfFile=*/false,
       /*AtStartOfBlock=*/true,

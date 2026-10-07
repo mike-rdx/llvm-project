@@ -3278,6 +3278,25 @@ struct FormatStyle {
   bool JavaScriptWrapImports;
   // clang-format on
 
+  /// If ``true``, line breaks that the input has next to binary operators
+  /// (such as ``%``, ``+``, ``&&``, ``==`` or ``<<``, but not assignments,
+  /// commas or ``?:``) are kept, on the side of the operator that
+  /// ``BreakBeforeBinaryOperators`` selects. This applies when the line, from
+  /// its start through the end of the expression that contains the operator
+  /// (up to the enclosing closing bracket, or the whole statement; comments
+  /// after it don't count), does not fit in the column limit; otherwise the
+  /// expression is formatted as usual.
+  /// Not breaking at such a place is penalized rather than forbidden, and
+  /// further breaks are still added where a line would exceed the limit.
+  /// \code
+  ///    true:                                   false:
+  ///    text = a % b % separator %              text = a % b % separator % c %
+  ///           c % d % separator %                     d % separator % e % f;
+  ///           e % f;
+  /// \endcode
+  /// \version 21
+  bool KeepBinaryOperatorLineBreaks;
+
   /// Options regarding which empty lines are kept.
   ///
   /// For example, the config below will remove empty lines at start of the
@@ -5592,6 +5611,7 @@ struct FormatStyle {
            JavaImportGroups == R.JavaImportGroups &&
            JavaScriptQuotes == R.JavaScriptQuotes &&
            JavaScriptWrapImports == R.JavaScriptWrapImports &&
+           KeepBinaryOperatorLineBreaks == R.KeepBinaryOperatorLineBreaks &&
            KeepEmptyLines == R.KeepEmptyLines &&
            KeepFormFeed == R.KeepFormFeed && Language == R.Language &&
            LambdaBodyIndentation == R.LambdaBodyIndentation &&

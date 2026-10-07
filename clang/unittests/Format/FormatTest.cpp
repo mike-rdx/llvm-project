@@ -2332,6 +2332,10 @@ TEST_F(FormatTest, ReturnTypeAlignment) {
   verifyFormat("int& Class::method(int &a);", Style);
   verifyFormat("int* (*f8())(int *a);", Style);
 
+  // Trailing return types of lambdas.
+  verifyFormat("auto l1 = [](int *a) -> int* { return a; };", Style);
+  verifyFormat("auto l2 = [](int &a) -> const int& { return a; };", Style);
+
   // Variables should still follow the default alignment.
   verifyFormat("int *a = nullptr;", Style);
   verifyFormat("int *b = f1(a, a);", Style);

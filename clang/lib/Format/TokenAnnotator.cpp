@@ -6552,10 +6552,10 @@ static bool isReturnType(const FormatToken &Tok, const LangOptions &LangOpts) {
     break;
   }
 
-  // Look backward to see if there's a trailing return arrow.
+  // Look backward to see if there's a trailing return arrow, also of a lambda.
   for (const FormatToken *Prev = Tok.Previous; Prev;
        Prev = Prev->getPreviousNonComment()) {
-    if (Prev->is(TT_TrailingReturnArrow))
+    if (Prev->isOneOf(TT_TrailingReturnArrow, TT_LambdaArrow))
       return true;
 
     if (Prev->is(TT_TemplateCloser) && Prev->MatchingParen) {

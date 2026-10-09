@@ -30098,6 +30098,152 @@ TEST_F(FormatTest, KeepBinaryOperatorLineBreaks) {
                Chain, Style);
 }
 
+// The option depends on the input's spacing, so every case gives the input
+// explicitly.
+TEST_F(FormatTest, KeepSpaceBeforeFunctionDeclarationParens) {
+  FormatStyle Style = getLLVMStyle();
+  EXPECT_FALSE(Style.KeepSpaceBeforeFunctionDeclarationParens);
+
+  const StringRef Input = "class A {\n"
+                          "  A (int x);\n"
+                          "  ~A ();\n"
+                          "  void f ();\n"
+                          "  void g();\n"
+                          "  bool operator== (const A &a) const;\n"
+                          "  bool operator!=(const A &a) const;\n"
+                          "};\n"
+                          "void A::f () {\n"
+                          "  g ();\n"
+                          "  auto l = [] (int x) { return x; };\n"
+                          "}";
+  verifyFormat("class A {\n"
+               "  A(int x);\n"
+               "  ~A();\n"
+               "  void f();\n"
+               "  void g();\n"
+               "  bool operator==(const A &a) const;\n"
+               "  bool operator!=(const A &a) const;\n"
+               "};\n"
+               "void A::f() {\n"
+               "  g();\n"
+               "  auto l = [](int x) { return x; };\n"
+               "}",
+               Input, Style);
+
+  // Declarations and definitions (constructors, destructors and operators
+  // too) keep their spacing; calls and lambdas don't.
+  Style.KeepSpaceBeforeFunctionDeclarationParens = true;
+  verifyFormat("class A {\n"
+               "  A (int x);\n"
+               "  ~A ();\n"
+               "  void f ();\n"
+               "  void g();\n"
+               "  bool operator== (const A &a) const;\n"
+               "  bool operator!=(const A &a) const;\n"
+               "};\n"
+               "void A::f () {\n"
+               "  g();\n"
+               "  auto l = [](int x) { return x; };\n"
+               "}",
+               Input, Style);
+
+  // Explicit specializations, also a member definition; calls with template
+  // arguments follow SpaceBeforeParens.
+  const StringRef Specializations =
+      "template <> void f<int> (int value);\n"
+      "template <> void f<double>(double value);\n"
+      "template <> void X::g<int> (int value) {}\n"
+      "void h() { f<int> (1); }";
+  verifyFormat("template <> void f<int> (int value);\n"
+               "template <> void f<double>(double value);\n"
+               "template <> void X::g<int> (int value) {}\n"
+               "void h() { f<int>(1); }",
+               Specializations, Style);
+
+  // Declarations with unnamed parameters of user-defined types, recognized by
+  // a void return type, "virtual", or what follows the parameter list. Calls
+  // and variables with direct initialization follow SpaceBeforeParens, as does
+  // "Event make (Event);", which may be a variable too.
+  const StringRef Unnamed =
+      "void onEvent (Event);\n"
+      "template <class T> void f (T);\n"
+      "struct Receiver {\n"
+      "  virtual void onEvent (Event) = 0;\n"
+      "  bool check (Event) const;\n"
+      "  auto get (Key) -> Value;\n"
+      "  void close (Handle) override;\n"
+      "  Receiver &operator= (const Receiver &) = default;\n"
+      "};\n"
+      "Event make (Event);\n"
+      "Event x (e);\n"
+      "void caller() { onEvent (e); }";
+  verifyFormat("void onEvent (Event);\n"
+               "template <class T> void f (T);\n"
+               "struct Receiver {\n"
+               "  virtual void onEvent (Event) = 0;\n"
+               "  bool check (Event) const;\n"
+               "  auto get (Key) -> Value;\n"
+               "  void close (Handle) override;\n"
+               "  Receiver &operator= (const Receiver &) = default;\n"
+               "};\n"
+               "Event make(Event);\n"
+               "Event x(e);\n"
+               "void caller() { onEvent(e); }",
+               Unnamed, Style);
+
+  // Attributes before the declaration and "virtual" after other specifiers
+  // don't hide it; spaced and unspaced input is kept. Variables with
+  // attributes follow SpaceBeforeParens.
+  const StringRef Attributes =
+      "[[deprecated(\"use g\")]] void oldHandler (Event);\n"
+      "__declspec(dllexport) void exportedHandler (Event);\n"
+      "__declspec(dllexport) void exportedNamed(Event event);\n"
+      "struct Receiver {\n"
+      "  [[nodiscard]] virtual bool acceptsChecked (Event);\n"
+      "  inline virtual bool acceptsInline(Event);\n"
+      "};\n"
+      "[[maybe_unused]] Event x (e);";
+  verifyFormat("[[deprecated(\"use g\")]] void oldHandler (Event);\n"
+               "__declspec(dllexport) void exportedHandler (Event);\n"
+               "__declspec(dllexport) void exportedNamed(Event event);\n"
+               "struct Receiver {\n"
+               "  [[nodiscard]] virtual bool acceptsChecked (Event);\n"
+               "  inline virtual bool acceptsInline(Event);\n"
+               "};\n"
+               "[[maybe_unused]] Event x(e);",
+               Attributes, Style);
+
+  // The option overrides SpaceBeforeParens for declarations only.
+  Style.SpaceBeforeParens = FormatStyle::SBPO_Always;
+  verifyFormat("[[deprecated (\"use g\")]] void oldHandler (Event);\n"
+               "__declspec (dllexport) void exportedHandler (Event);\n"
+               "__declspec (dllexport) void exportedNamed(Event event);\n"
+               "struct Receiver {\n"
+               "  [[nodiscard]] virtual bool acceptsChecked (Event);\n"
+               "  inline virtual bool acceptsInline(Event);\n"
+               "};\n"
+               "[[maybe_unused]] Event x (e);",
+               Attributes, Style);
+  verifyFormat("template <> void f<int> (int value);\n"
+               "template <> void f<double>(double value);\n"
+               "template <> void X::g<int> (int value) {}\n"
+               "void h() { f<int> (1); }",
+               Specializations, Style);
+  verifyFormat("class A {\n"
+               "  A (int x);\n"
+               "  ~A ();\n"
+               "  void f ();\n"
+               "  void g();\n"
+               "  bool operator== (const A &a) const;\n"
+               "  bool operator!=(const A &a) const;\n"
+               "};\n"
+               "void A::f () {\n"
+               "  g ();\n"
+               "  auto l = [] (int x) { return x; };\n"
+               "}",
+               Input, Style);
+}
+
 TEST_F(FormatTest, RemoveEmptyLinesInUnwrappedLines) {
   auto Style = getLLVMStyle();
   Style.RemoveEmptyLinesInUnwrappedLines = true;

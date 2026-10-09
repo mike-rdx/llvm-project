@@ -4826,6 +4826,27 @@ the configuration (without a prefix: ``Auto``).
   replaced with a single newline and form feed followed by the remaining
   newlines.
 
+.. _KeepSpaceBeforeFunctionDeclarationParens:
+
+**KeepSpaceBeforeFunctionDeclarationParens** (``Boolean``) :versionbadge:`clang-format 21` :ref:`¶ <KeepSpaceBeforeFunctionDeclarationParens>`
+  If ``true``, the space before the parameter list of a function
+  declaration or definition (including an overloaded operator or a template
+  specialization) is kept as in the input: a space stays, no space stays
+  none. Calls are not affected. Overrides ``SpaceBeforeParens`` for these
+  parentheses. A declaration whose parameters are only unnamed types, such
+  as ``void f(Event);``, counts as one when a variable is ruled out: a
+  ``void`` return type, ``virtual`` among the declaration specifiers
+  (attributes are skipped), or ``const``, ``noexcept``, ``override``,
+  ``final``, ``->`` or ``= 0/default/delete`` after the parameters;
+  otherwise (``Event f(Event);``) ``SpaceBeforeParens`` decides.
+
+  .. code-block:: c++
+
+     true (input kept):             false (SpaceBeforeParens):
+     void Dialog::update ();        void Dialog::update();
+     bool operator== (const A &a);  bool operator==(const A &a);
+     void Dialog::refresh();        void Dialog::refresh();
+
 .. _LambdaBodyIndentation:
 
 **LambdaBodyIndentation** (``LambdaBodyIndentationKind``) :versionbadge:`clang-format 13` :ref:`¶ <LambdaBodyIndentation>`

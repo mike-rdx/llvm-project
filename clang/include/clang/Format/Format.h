@@ -3349,6 +3349,25 @@ struct FormatStyle {
   /// \version 20
   bool KeepFormFeed;
 
+  /// If ``true``, the space before the parameter list of a function
+  /// declaration or definition (including an overloaded operator or a template
+  /// specialization) is kept as in the input: a space stays, no space stays
+  /// none. Calls are not affected. Overrides ``SpaceBeforeParens`` for these
+  /// parentheses. A declaration whose parameters are only unnamed types, such
+  /// as ``void f(Event);``, counts as one when a variable is ruled out: a
+  /// ``void`` return type, ``virtual`` among the declaration specifiers
+  /// (attributes are skipped), or ``const``, ``noexcept``, ``override``,
+  /// ``final``, ``->`` or ``= 0/default/delete`` after the parameters;
+  /// otherwise (``Event f(Event);``) ``SpaceBeforeParens`` decides.
+  /// \code
+  ///    true (input kept):             false (SpaceBeforeParens):
+  ///    void Dialog::update ();        void Dialog::update();
+  ///    bool operator== (const A &a);  bool operator==(const A &a);
+  ///    void Dialog::refresh();        void Dialog::refresh();
+  /// \endcode
+  /// \version 21
+  bool KeepSpaceBeforeFunctionDeclarationParens;
+
   /// Indentation logic for lambda bodies.
   enum LambdaBodyIndentationKind : int8_t {
     /// Align lambda body relative to the lambda signature. This is the default.
@@ -5613,7 +5632,10 @@ struct FormatStyle {
            JavaScriptWrapImports == R.JavaScriptWrapImports &&
            KeepBinaryOperatorLineBreaks == R.KeepBinaryOperatorLineBreaks &&
            KeepEmptyLines == R.KeepEmptyLines &&
-           KeepFormFeed == R.KeepFormFeed && Language == R.Language &&
+           KeepFormFeed == R.KeepFormFeed &&
+           KeepSpaceBeforeFunctionDeclarationParens ==
+               R.KeepSpaceBeforeFunctionDeclarationParens &&
+           Language == R.Language &&
            LambdaBodyIndentation == R.LambdaBodyIndentation &&
            LambdaHeaderOnStatementLine == R.LambdaHeaderOnStatementLine &&
            LineEnding == R.LineEnding && MacroBlockBegin == R.MacroBlockBegin &&

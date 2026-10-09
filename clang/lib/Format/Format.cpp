@@ -1194,6 +1194,8 @@ template <> struct MappingTraits<FormatStyle> {
                    Style.KeepBinaryOperatorLineBreaks);
     IO.mapOptional("KeepEmptyLines", Style.KeepEmptyLines);
     IO.mapOptional("KeepFormFeed", Style.KeepFormFeed);
+    IO.mapOptional("KeepSpaceBeforeFunctionDeclarationParens",
+                   Style.KeepSpaceBeforeFunctionDeclarationParens);
     IO.mapOptional("LambdaBodyIndentation", Style.LambdaBodyIndentation);
     IO.mapOptional("LambdaHeaderOnStatementLine",
                    Style.LambdaHeaderOnStatementLine);
@@ -1729,6 +1731,7 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
       /*AtStartOfFile=*/true,
   };
   LLVMStyle.KeepFormFeed = false;
+  LLVMStyle.KeepSpaceBeforeFunctionDeclarationParens = false;
   LLVMStyle.LambdaBodyIndentation = FormatStyle::LBI_Signature;
   LLVMStyle.LambdaHeaderOnStatementLine = FormatStyle::LHSL_Never;
   LLVMStyle.Language = Language;

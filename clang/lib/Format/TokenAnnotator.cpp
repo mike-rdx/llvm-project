@@ -4527,6 +4527,83 @@ bool TokenAnnotator::spaceRequiredBeforeParens(const FormatToken &Right) const {
   return false;
 }
 
+// Whether LParen opens the parameter list of a function declaration or
+// definition, for KeepSpaceBeforeFunctionDeclarationParens. Besides the
+// parentheses annotated as such, this recognizes declarations the annotator
+// can't tell from a variable with direct initialization, e.g.
+// "void f(Event);" vs. "Event x(e);": LParen must be the first parenthesis of
+// the line apart from attributes, after a name (possibly with template
+// arguments), and the context must rule out a variable: the return type is
+// "void", "virtual" is among the declaration specifiers, or the parentheses
+// are followed by something only a function can have ("const", "noexcept",
+// "override", "final", "->", "= 0", "= default", "= delete").
+static bool opensFunctionDeclarationParameters(const AnnotatedLine &Line,
+                                               const FormatToken &LParen) {
+  if (!Line.MightBeFunctionDecl)
+    return false;
+  if (LParen.isOneOf(TT_FunctionDeclarationLParen, TT_OverloadedOperatorLParen))
+    return true;
+  if (LParen.isNot(TT_Unknown) || LParen.NestingLevel != 0 ||
+      !LParen.MatchingParen) {
+    return false;
+  }
+  // The declaration specifiers before the name: attributes are skipped as a
+  // whole, any other parenthesis means a call, a cast or an expression.
+  bool IsVirtual = false;
+  for (const FormatToken *Tok = Line.First; Tok && Tok != &LParen;
+       Tok = Tok->Next) {
+    if (Tok->is(tok::l_square) && Tok->is(TT_AttributeSquare) &&
+        Tok->MatchingParen) {
+      Tok = Tok->MatchingParen;
+      continue;
+    }
+    if ((Tok->isAttribute() || Tok->is(tok::kw_alignas)) && Tok->Next &&
+        Tok->Next->is(tok::l_paren) && Tok->Next->MatchingParen) {
+      Tok = Tok->Next->MatchingParen;
+      continue;
+    }
+    if (Tok->isOneOf(tok::l_paren, tok::equal, tok::l_brace))
+      return false;
+    if (Tok->is(tok::kw_virtual))
+      IsVirtual = true;
+  }
+
+  const FormatToken *Name = LParen.getPreviousNonComment();
+  if (Name && Name->is(TT_TemplateCloser) && Name->MatchingParen)
+    Name = Name->MatchingParen->getPreviousNonComment();
+  if (!Name || Name->isNot(tok::identifier))
+    return false;
+  const FormatToken *BeforeName = Name->getPreviousNonComment();
+  while (BeforeName && BeforeName->is(tok::coloncolon)) {
+    BeforeName = BeforeName->getPreviousNonComment();
+    if (BeforeName && BeforeName->is(TT_TemplateCloser) &&
+        BeforeName->MatchingParen) {
+      BeforeName = BeforeName->MatchingParen->getPreviousNonComment();
+    }
+    if (BeforeName && BeforeName->is(tok::identifier))
+      BeforeName = BeforeName->getPreviousNonComment();
+  }
+  if (!BeforeName)
+    return false;
+
+  if (BeforeName->is(tok::kw_void) || IsVirtual)
+    return true;
+  const FormatToken *After = LParen.MatchingParen->getNextNonComment();
+  if (!After)
+    return false;
+  if (After->isOneOf(tok::kw_const, tok::kw_noexcept, tok::arrow,
+                     TT_TrailingReturnArrow) ||
+      (After->is(tok::identifier) &&
+       (After->TokenText == "override" || After->TokenText == "final"))) {
+    return true;
+  }
+  const FormatToken *AfterEqual = After->getNextNonComment();
+  return After->is(tok::equal) && AfterEqual &&
+         (AfterEqual->isOneOf(tok::kw_default, tok::kw_delete) ||
+          (AfterEqual->is(tok::numeric_constant) &&
+           AfterEqual->TokenText == "0"));
+}
+
 bool TokenAnnotator::spaceRequiredBetween(const AnnotatedLine &Line,
                                           const FormatToken &Left,
                                           const FormatToken &Right) const {
@@ -4853,6 +4930,12 @@ bool TokenAnnotator::spaceRequiredBetween(const AnnotatedLine &Line,
     return true;
   // Space before parentheses common for all languages
   if (Right.is(tok::l_paren)) {
+    // Keep the input's spacing before the parameter list of a function
+    // declaration or definition, also after template arguments.
+    if (Style.KeepSpaceBeforeFunctionDeclarationParens &&
+        opensFunctionDeclarationParameters(Line, Right)) {
+      return Right.hasWhitespaceBefore();
+    }
     if (Left.is(TT_TemplateCloser) && Right.isNot(TT_FunctionTypeLParen))
       return spaceRequiredBeforeParens(Right);
     if (Left.isOneOf(TT_RequiresClause,

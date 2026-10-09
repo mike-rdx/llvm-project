@@ -1,7 +1,7 @@
 # rdx clang-format
 
 This fork of [llvm/llvm-project](https://github.com/llvm/llvm-project) carries a modified
-clang-format for the rdx code base. It adds three style options that the rdx coding rules need and
+clang-format for the rdx code base. It adds four style options that the rdx coding rules need and
 that upstream clang-format does not have, plus one backported upstream change, which the fork
 extends with a `WithoutName` sub-option and lambda return types.
 
@@ -34,6 +34,7 @@ Commits on `backport-pr-169160` on top of `llvmorg-21.1.8`:
 | `1b1329d9` | `[clang-format] Add WithoutName to PointerAlignment and ReferenceAlignment` |
 | `c4d31089` | `[clang-format] Treat type aliases and arrays of pointers as WithoutName, but not ref-qualifiers` |
 | `5a9c8798` | `[clang-format] Add KeepBinaryOperatorLineBreaks style option` |
+| `7297c068` | `[clang-format] Add KeepSpaceBeforeFunctionDeclarationParens style option` |
 
 ## New options
 
@@ -221,6 +222,42 @@ log_text =
 - Old wraps are kept too: a line someone wrapped early stays wrapped there as long as it doesn't
   exceed the limit.
 
+### KeepSpaceBeforeFunctionDeclarationParens
+
+```yaml
+KeepSpaceBeforeFunctionDeclarationParens: false   # default: SpaceBeforeParens decides
+KeepSpaceBeforeFunctionDeclarationParens: true
+```
+
+The rdx code base writes function declarations both as `void update ();` and as `void update();`,
+usually one way per file. Upstream clang-format can only add or remove that space everywhere
+(`SpaceBeforeParens`), so reformatting a file written the other way changes almost every
+declaration line. With `true`, the space before the parameter list of a function declaration or
+definition is kept as in the input:
+
+```cpp
+// input, and the result with true          // false
+Dialog (QWidget *p_parent);                 Dialog(QWidget *p_parent);
+void Dialog::update ();                     void Dialog::update();
+bool operator== (const Item &item) const;   bool operator==(const Item &item) const;
+void Dialog::refresh();                     void Dialog::refresh();
+```
+
+- It covers declarations and definitions, including constructors, destructors, templates,
+  explicit specializations (`template <> void f<int> (int value);`) and overloaded operators, and
+  overrides `SpaceBeforeParens` for them.
+- Calls (`refresh ()`, `f<int> (1)`) and lambdas (`[] (int x)`) are not affected:
+  `SpaceBeforeParens` decides.
+- clang-format can't tell `void onEvent (Event);` from the variable `Event x (e);` by the
+  parameter list alone, when the parameters are only unnamed types. Such a declaration still keeps
+  its spacing when a variable is ruled out: a `void` return type, `virtual`, or `const`,
+  `noexcept`, `override`, `final`, `->` or `= 0` / `= default` / `= delete` after the parameters.
+  Attributes before the declaration (`[[nodiscard]]`, `__declspec(dllexport)`,
+  `__attribute__((...))`, `alignas(...)`) are skipped, and `virtual` counts anywhere among the
+  declaration specifiers (`inline virtual`, `void virtual`). Otherwise, e.g. `Event make (Event);`,
+  `SpaceBeforeParens` decides.
+- Code formatted with `false` is unchanged by formatting it again with `true`.
+
 ### Pointer and reference alignment: return types (backport of PR #169160) and `WithoutName`
 
 `PointerAlignment` and `ReferenceAlignment` accept a struct with a `ReturnType` sub-option that
@@ -300,7 +337,7 @@ cmake --build build-codex --config Release --target clang-format FormatTests
 
 ## Tests
 
-All 1,226 `FormatTests` pass. The new options are covered by these tests in
+All 1,227 `FormatTests` pass. The new options are covered by these tests in
 `clang/unittests/Format/FormatTest.cpp`:
 
 | Test | Covers |
@@ -314,6 +351,7 @@ All 1,226 `FormatTests` pass. The new options are covered by these tests in
 | `LambdaHeaderOnStatementLineKeepsTrailingComment` | a `//` comment after the header: long and short bodies, `-> bool`, `[]` without parameters, the comment counted in the column limit, other comments (on a line of their own, block comment, inside the captures), `IfFitsOnAssignment` |
 | `LambdaHeaderOnStatementLineSkipsNonStatements` | default argument, type alias, `static_assert`, multi-line raw string, empty lambda |
 | `KeepBinaryOperatorLineBreaks` | default `false` re-packs; kept chain; break before the operator moved after it; joined when it fits; too-long input line wrapped further; condition; operand of a call argument; assignment, comma and `?:` breaks not kept; an empty line or comment before the operator; a trailing comment after a fitting and after a long expression; `BreakBeforeBinaryOperators: All` |
+| `KeepSpaceBeforeFunctionDeclarationParens` | default `false` normalizes; `true` keeps the spacing of declarations, definitions, constructors, destructors and operators, not of calls and lambdas; explicit specializations (also a member definition) vs. a call with template arguments; unnamed user-defined parameter types with `void`, `virtual`, `const`, `->`, `override`, `= 0`, `= default`, vs. calls, direct initialization and the ambiguous `Event make (Event);`; attributes (`[[deprecated(...)]]`, `__declspec(...)`, `[[nodiscard]] virtual`, `inline virtual`), spaced and unspaced, vs. a variable with an attribute; `SpaceBeforeParens: Always` still applies to calls and lambdas |
 | `ReturnTypeAlignment` | the backported `ReturnType` tests, plus lambda trailing return types |
 | `WithoutNameAlignment` | casts, template arguments, function types, `sizeof`, type aliases, arrays of pointers, unnamed parameters, `catch`; named declarations, structured bindings, attributes, ref-qualifiers and expressions unchanged; `ReturnType` precedence |
 
@@ -330,6 +368,7 @@ The rdx `.clang-format` enables the options of this fork:
 BreakAfterAssignment: IfOverLimit
 LambdaHeaderOnStatementLine: IfFitsAlways
 KeepBinaryOperatorLineBreaks: true    # switched off by the rdx scripts for agent-written code
+KeepSpaceBeforeFunctionDeclarationParens: true   # likewise
 PointerAlignment:
   Default: Right
   ReturnType: Left
@@ -392,6 +431,9 @@ Measured on the C++ files of the main rdx solution with the rdx configuration:
   keep all their breaks (1,650 with `false`), 405 are joined because they fit on one line. 314
   files change; no new lines over the column limit. Formatting the `false` output again with
   `true` changes no file.
+- `KeepSpaceBeforeFunctionDeclarationParens: true` on the same files: formatting the whole code
+  base changes 258,305 lines instead of 304,009 and 127 fewer files. Formatting the `false`
+  output again with `true` changes no file.
 - No crashes, no non-whitespace changes, and no new files that need a second formatting pass.
 
 ## Known limitations
